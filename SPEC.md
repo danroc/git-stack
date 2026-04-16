@@ -44,6 +44,18 @@ Iterates through all feature branches in the identified stack — excluding the 
 
 ---
 
+**`git-stack rebase`**
+
+Rebases each feature branch in the stack onto the current tip of its immediate parent, bottom-to-top. Given a stack `main -> A -> B -> C`, the sequence is:
+
+1. Check out A, rebase onto `main`.
+2. Check out B, rebase onto the updated tip of A.
+3. Check out C, rebase onto the updated tip of B.
+
+This ensures every branch in the stack sits directly on top of the latest commit of the branch below it. If a rebase produces conflicts, the command halts immediately and leaves the repository in the in-progress rebase state. The user resolves conflicts with `git rebase --continue` or `git rebase --abort` and re-runs the command. On full success, the originally checked-out branch is restored.
+
+---
+
 **`git-stack view`**
 
 Renders a linear representation of the current stack. The active branch is marked with `*`. Each branch (except the base) shows how many commits it is ahead of its immediate parent in the stack.
@@ -90,7 +102,7 @@ The selection applies to that single invocation only and is not persisted.
 
 ### 4.3 Conflict and Error Management
 
-If any operation (`push`, `pull --rebase`) fails for any reason:
+If any operation (`push`, `pull --rebase`, `rebase`) fails for any reason:
 
 - Halt execution immediately; do not process remaining branches.
 - Print the name of the branch that failed along with the error.
@@ -118,7 +130,7 @@ If any operation (`push`, `pull --rebase`) fails for any reason:
 - **Integration Tests**: Shell scripts that:
   1. Initialize real Git repositories.
   2. Create known topologies (linear, bifurcated, disconnected).
-  3. Assert that `add`, `push`, `pull`, and `view` produce correct output and exit codes per this specification.
+  3. Assert that `add`, `push`, `pull`, `rebase`, and `view` produce correct output and exit codes per this specification.
 
 ## 7. Out of Scope
 
