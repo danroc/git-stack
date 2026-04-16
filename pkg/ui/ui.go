@@ -33,23 +33,11 @@ func (ew *writer) printf(format string, args ...any) {
 	}
 }
 
-// RenderTree prints the full stack tree to w. Example output:
-//
-//	main
-//	│
-//	├─ feat-auth          +3
-//	│  │
-//	│  ├─ feat-auth-ui    +1   *current
-//	│  │
-//	│  └─ feat-auth-mobile  +2
-//	│
-//	└─ feat-payment       +2
-//	   │
-//	   └─ feat-payment-ui  +1
+// RenderTree prints the full stack tree to w.
 func RenderTree(root *TreeEntry, w io.Writer) {
 	pal := plainPalette()
 	if f, ok := w.(*os.File); ok {
-		//nolint:gosec // Fd() fits in int on all supported platforms
+		//nolint:gosec -- Fd() fits in int on all supported platforms
 		if term.IsTerminal(int(f.Fd())) {
 			pal = colorPalette()
 		}
