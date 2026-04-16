@@ -134,62 +134,60 @@ func (e *DiscoveryEngine) traceDescendants(
 	branch string,
 	disambiguate DisambiguateFn,
 ) ([]StackMember, error) {
-	above := e.branchesAbove(branch)
-	if len(above) == 0 {
-		return nil, nil
-	}
+	var result []StackMember
+	for {
+		children := e.directChildren(branch)
+		if len(children) == 0 {
+			return result, nil
+		}
 
-	direct := e.filterDirectChildren(above)
-	chosen, err := selectOne(direct, disambiguate)
-	if err != nil {
-		return nil, err
-	}
+		var chosen string
+		if len(children) == 1 {
+			chosen = children[0]
+		} else {
+			var err error
+			chosen, err = disambiguate("traverse", children)
+			if err != nil {
+				return nil, err
+			}
+		}
 
-	chosenHash, _ := e.graph.HeadOf(chosen)
-	rest, err := e.traceDescendants(chosen, disambiguate)
-	if err != nil {
-		return nil, err
+		chosenHash, _ := e.graph.HeadOf(chosen)
+		result = append(result, StackMember{BranchName: chosen, CommitHash: chosenHash})
+		branch = chosen
 	}
-
-	head := []StackMember{{BranchName: chosen, CommitHash: chosenHash}}
-	return append(head, rest...), nil
 }
 
 // BuildTree constructs the full branch tree rooted at the base branch. Unlike
 // DiscoverStack, it never prompts, all descendants are included.
-func (e *DiscoveryEngine) BuildTree() (*TreeNode, error) {
+func (e *DiscoveryEngine) BuildTree() *TreeNode {
 	baseHead, _ := e.graph.HeadOf(e.baseBranch)
 	root := &TreeNode{
 		Member: StackMember{BranchName: e.baseBranch, CommitHash: baseHead},
 	}
-	if err := e.buildChildren(root); err != nil {
-		return nil, err
-	}
-	return root, nil
+	e.buildChildren(root)
+	return root
 }
 
-func (e *DiscoveryEngine) buildChildren(node *TreeNode) error {
-	for _, child := range e.filterDirectChildren(
-		e.branchesAbove(node.Member.BranchName),
-	) {
+func (e *DiscoveryEngine) buildChildren(node *TreeNode) {
+	for _, child := range e.directChildren(node.Member.BranchName) {
 		childHash, _ := e.graph.HeadOf(child)
 		childNode := &TreeNode{
 			Member:       StackMember{BranchName: child, CommitHash: childHash},
 			CommitsAhead: e.graph.CommitsAhead(node.Member.CommitHash, childHash),
 		}
 		node.Children = append(node.Children, childNode)
-		if err := e.buildChildren(childNode); err != nil {
-			return err
-		}
+		e.buildChildren(childNode)
 	}
-	return nil
 }
 
-// branchesAbove returns all branches (excluding parent and baseBranch itself) whose
-// HEAD is above parent in the commit graph.
-func (e *DiscoveryEngine) branchesAbove(parent string) []string {
+// directChildren returns branches whose HEAD is above parent and that have no other
+// such branch sitting between them and parent.
+func (e *DiscoveryEngine) directChildren(parent string) []string {
 	parentHead, _ := e.graph.HeadOf(parent)
-	var result []string
+
+	// Collect all branches above parent.
+	var above []string
 	for _, branch := range e.graph.Branches() {
 		if branch == parent || branch == e.baseBranch {
 			continue
@@ -200,32 +198,21 @@ func (e *DiscoveryEngine) branchesAbove(parent string) []string {
 		}
 		if parent == e.baseBranch {
 			if e.graph.Contains(head) {
-				result = append(result, branch)
+				above = append(above, branch)
 			}
 		} else {
 			if e.graph.IsAncestor(parentHead, head) {
-				result = append(result, branch)
+				above = append(above, branch)
 			}
 		}
 	}
-	return result
-}
 
-func selectOne(choices []string, disambiguate DisambiguateFn) (string, error) {
-	if len(choices) == 1 {
-		return choices[0], nil
-	}
-	return disambiguate("traverse", choices)
-}
-
-// filterDirectChildren returns the subset of candidates that have no other candidate
-// sitting between them and their common ancestor.
-func (e *DiscoveryEngine) filterDirectChildren(candidates []string) []string {
+	// Filter to only direct children (no intermediate branch between parent and child).
 	var direct []string
-	for _, c := range candidates {
+	for _, c := range above {
 		cHead, _ := e.graph.HeadOf(c)
 		isDirect := true
-		for _, other := range candidates {
+		for _, other := range above {
 			if other == c {
 				continue
 			}

@@ -72,10 +72,7 @@ func cmdView() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			root, err := disc.BuildTree()
-			if err != nil {
-				return err
-			}
+			root := disc.BuildTree()
 			ui.RenderTree(buildDisplayTree(root, current), os.Stdout)
 			return nil
 		},
