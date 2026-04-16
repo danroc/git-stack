@@ -8,6 +8,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 // TreeEntry is the display-layer input for RenderTree.
@@ -21,6 +23,7 @@ type TreeEntry struct {
 // writer wraps an io.Writer and absorbs write errors after the first failure.
 type writer struct {
 	w   io.Writer
+	pal palette
 	err error
 }
 
@@ -44,12 +47,20 @@ func (ew *writer) printf(format string, args ...any) {
 //	   │
 //	   └─ feat-payment-ui  +1
 func RenderTree(root *TreeEntry, w io.Writer) {
-	ew := &writer{w: w}
-	ew.printf("%s\n", formatEntry(root))
+	pal := plainPalette()
+	if f, ok := w.(*os.File); ok {
+		//nolint:gosec // Fd() fits in int on all supported platforms
+		if term.IsTerminal(int(f.Fd())) {
+			pal = colorPalette()
+		}
+	}
+	ew := &writer{w: w, pal: pal}
+	ew.printf("%s\n", formatEntry(root, pal))
 	renderChildren(root.Children, "", ew)
 }
 
 func renderChildren(children []*TreeEntry, prefix string, w *writer) {
+	p := w.pal
 	for i, child := range children {
 		isLast := i == len(children)-1
 		connector := "├─ "
@@ -58,21 +69,27 @@ func renderChildren(children []*TreeEntry, prefix string, w *writer) {
 			connector = "└─ "
 			childPrefix = "   "
 		}
-		w.printf("%s│\n", prefix)
-		w.printf("%s%s%s\n", prefix, connector, formatEntry(child))
+		w.printf("%s%s│%s\n", p.dimPrefix(prefix), p.connector, p.reset)
+		w.printf(
+			"%s%s%s%s%s\n",
+			p.dimPrefix(prefix), p.connector, connector, p.reset, formatEntry(child, p),
+		)
 		if len(child.Children) > 0 {
 			renderChildren(child.Children, prefix+childPrefix, w)
 		}
 	}
 }
 
-func formatEntry(e *TreeEntry) string {
+func formatEntry(e *TreeEntry, p palette) string {
 	s := e.BranchName
+	if e.IsCurrent {
+		s = p.branch + s + p.reset
+	}
 	if e.AheadCount > 0 {
-		s += fmt.Sprintf("  +%d", e.AheadCount)
+		s += fmt.Sprintf(" (%s+%d%s)", p.ahead, e.AheadCount, p.reset)
 	}
 	if e.IsCurrent {
-		s += "  *current"
+		s += fmt.Sprintf(" - %sCURRENT%s", p.current, p.reset)
 	}
 	return s
 }
