@@ -23,7 +23,7 @@ type TreeEntry struct {
 // writer wraps an io.Writer and absorbs write errors after the first failure.
 type writer struct {
 	w   io.Writer
-	pal palette
+	p   palette
 	err error
 }
 
@@ -35,49 +35,57 @@ func (ew *writer) printf(format string, args ...any) {
 
 // RenderTree prints the full stack tree to w.
 func RenderTree(root *TreeEntry, w io.Writer) {
-	pal := plainPalette()
+	p := plainPalette()
 	if f, ok := w.(*os.File); ok {
-		//nolint:gosec -- Fd() fits in int on all supported platforms
-		if term.IsTerminal(int(f.Fd())) {
-			pal = colorPalette()
+		if term.IsTerminal(int(f.Fd())) { //nolint:gosec
+			p = colorPalette()
 		}
 	}
-	ew := &writer{w: w, pal: pal}
-	ew.printf("%s\n", formatEntry(root, pal))
+
+	ew := &writer{w: w, p: p}
+	ew.printf("%s\n", p.formatEntry(root))
 	renderChildren(root.Children, "", ew)
 }
 
+const (
+	treeBar       = "│"
+	treeTee       = "├─ "
+	treeBarIndent = "│  "
+	treeElbow     = "└─ "
+	treeIndent    = "   "
+)
+
 func renderChildren(children []*TreeEntry, prefix string, w *writer) {
-	p := w.pal
 	for i, child := range children {
 		isLast := i == len(children)-1
-		connector := "├─ "
-		childPrefix := "│  "
+		connector := treeTee
+		childPrefix := treeBarIndent
 		if isLast {
-			connector = "└─ "
-			childPrefix = "   "
+			connector = treeElbow
+			childPrefix = treeIndent
 		}
-		w.printf("%s%s│%s\n", p.dimPrefix(prefix), p.connector, p.reset)
+
+		w.printf("%s%s\n", w.p.formatPrefix(prefix), w.p.formatConnector(treeBar))
 		w.printf(
-			"%s%s%s%s%s\n",
-			p.dimPrefix(prefix), p.connector, connector, p.reset, formatEntry(child, p),
+			"%s%s%s\n",
+			w.p.formatPrefix(prefix),
+			w.p.formatConnector(connector),
+			w.p.formatEntry(child),
 		)
+
 		if len(child.Children) > 0 {
 			renderChildren(child.Children, prefix+childPrefix, w)
 		}
 	}
 }
 
-func formatEntry(e *TreeEntry, p palette) string {
+func (p palette) formatEntry(e *TreeEntry) string {
 	s := e.BranchName
 	if e.IsCurrent {
 		s = p.branch + s + p.reset
 	}
 	if e.AheadCount > 0 {
 		s += fmt.Sprintf(" (%s+%d%s)", p.ahead, e.AheadCount, p.reset)
-	}
-	if e.IsCurrent {
-		s += fmt.Sprintf(" - %sCURRENT%s", p.current, p.reset)
 	}
 	return s
 }
@@ -102,5 +110,6 @@ func Disambiguate(action string, choices []string) (string, error) {
 	if err != nil || n < 1 || n > len(choices) {
 		return "", fmt.Errorf("invalid choice %q", line)
 	}
+
 	return choices[n-1], nil
 }

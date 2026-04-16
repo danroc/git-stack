@@ -21,6 +21,19 @@ func NewGit(dir string) *Git {
 	return &Git{dir: dir}
 }
 
+// GitError is returned when a git subprocess exits with a non-zero status.
+type GitError struct {
+	Args   []string
+	Stderr string
+	Err    error
+}
+
+func (e *GitError) Error() string {
+	return fmt.Sprintf("git %s: %s", strings.Join(e.Args, " "), e.Err)
+}
+
+func (e *GitError) Unwrap() error { return e.Err }
+
 func (g *Git) run(args ...string) (string, error) {
 	var (
 		stdout bytes.Buffer
@@ -34,12 +47,11 @@ func (g *Git) run(args ...string) (string, error) {
 
 	err := cmd.Run()
 	if err != nil {
-		return "", fmt.Errorf(
-			"git %s: %w (stderr: %q)",
-			strings.Join(args, " "),
-			err,
-			strings.TrimSpace(stderr.String()),
-		)
+		return "", &GitError{
+			Args:   args,
+			Stderr: strings.TrimSpace(stderr.String()),
+			Err:    err,
+		}
 	}
 	return strings.TrimSpace(stdout.String()), nil
 }

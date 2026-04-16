@@ -2,6 +2,7 @@
 package stack
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -64,104 +65,103 @@ func New(git *gitutils.Git, base string) (*Stack, error) {
 
 // Push pushes every non-base branch in the stack, bottom-to-top.
 // Halts on the first failure and reports the failing branch.
-func (s *Stack) Push(w io.Writer) error {
-	current, err := s.git.CurrentBranch()
-	if err != nil {
-		return err
+// writeGitErr prints the stderr from a GitError to w with surrounding blank lines.
+func writeGitErr(w *writer, err error) {
+	var gitErr *gitutils.GitError
+	if errors.As(err, &gitErr) && gitErr.Stderr != "" {
+		w.printf("\n\n%s\n\n", gitErr.Stderr)
+	} else {
+		w.printf("\n")
 	}
-	members, err := s.disc.DiscoverStack(current, s.disambiguate)
-	if err != nil {
-		return err
-	}
-	ew := &writer{w: w}
-	for _, m := range members {
-		if m.BranchName == s.disc.BaseBranch() {
-			continue
-		}
-		ew.printf("Pushing %s... ", m.BranchName)
-		if err := s.git.Push(m.BranchName); err != nil {
-			ew.printf("\n")
-			return fmt.Errorf("push %s: %w", m.BranchName, err)
-		}
-		ew.printf("done\n")
-	}
-	return nil
 }
 
-// Rebase rebases each non-base branch onto the current tip of its immediate
-// parent, bottom-to-top. On conflict it halts and leaves the repository in the
-// in-progress rebase state. On full success it restores the original branch.
-func (s *Stack) Rebase(w io.Writer) error {
+// branchAction is called for each non-base branch in the stack. It receives the
+// branch name, its parent's name, and the index in the member list.
+type branchAction func(branch, parent string) error
+
+// forEachBranch discovers the stack, iterates non-base members bottom-to-top,
+// and calls action for each. If restoreBranch is true, the original branch is
+// checked out after all actions succeed.
+func (s *Stack) forEachBranch(
+	w io.Writer,
+	restoreBranch bool,
+	action branchAction,
+) error {
 	current, err := s.git.CurrentBranch()
 	if err != nil {
 		return err
 	}
+
 	members, err := s.disc.DiscoverStack(current, s.disambiguate)
 	if err != nil {
 		return err
 	}
+
 	ew := &writer{w: w}
 	for i, m := range members {
 		if m.BranchName == s.disc.BaseBranch() {
 			continue
 		}
 		parent := members[i-1].BranchName
-		ew.printf("Rebasing %s onto %s... ", m.BranchName, parent)
-		if err := s.git.Checkout(m.BranchName); err != nil {
-			ew.printf("\n")
-			return fmt.Errorf("checkout %s: %w", m.BranchName, err)
+		if err := action(m.BranchName, parent); err != nil {
+			writeGitErr(ew, err)
+			return err
 		}
-		if err := s.git.Rebase(parent); err != nil {
-			ew.printf("\n")
-			return fmt.Errorf(
-				"rebase %s onto %s: %w\nresolve with: git rebase --continue  or  git rebase --abort",
-				m.BranchName,
-				parent,
-				err,
-			)
-		}
-		ew.printf("done\n")
 	}
-	if err := s.git.Checkout(current); err != nil {
-		return fmt.Errorf("restoring branch %s: %w", current, err)
+
+	if restoreBranch {
+		if err := s.git.Checkout(current); err != nil {
+			return fmt.Errorf("restoring branch %s: %w", current, err)
+		}
 	}
 	return nil
+}
+
+// Push pushes every non-base branch in the stack to its upstream, bottom-to-top.
+func (s *Stack) Push(w io.Writer) error {
+	ew := &writer{w: w}
+	return s.forEachBranch(w, false, func(branch, _ string) error {
+		ew.printf("Pushing %s... ", branch)
+		if err := s.git.Push(branch); err != nil {
+			return fmt.Errorf("push %s failed: %w", branch, err)
+		}
+		ew.printf("done\n")
+		return nil
+	})
+}
+
+// Rebase rebases each non-base branch onto the current tip of its immediate
+// parent, bottom-to-top. On conflict it halts and leaves the repository in the
+// in-progress rebase state. On full success it restores the original branch.
+func (s *Stack) Rebase(w io.Writer) error {
+	ew := &writer{w: w}
+	return s.forEachBranch(w, true, func(branch, parent string) error {
+		ew.printf("Rebasing %s onto %s... ", branch, parent)
+		if err := s.git.Checkout(branch); err != nil {
+			return fmt.Errorf("checkout %s failed: %w", branch, err)
+		}
+		if err := s.git.Rebase(parent); err != nil {
+			return fmt.Errorf("rebase %s onto %s failed: %w", branch, parent, err)
+		}
+		ew.printf("done\n")
+		return nil
+	})
 }
 
 // Pull checks out and pulls (--rebase) every non-base branch in order.
 // On failure it halts and leaves the repo on the failing branch so the user
 // can resolve conflicts and re-run. On full success it restores the original branch.
 func (s *Stack) Pull(w io.Writer) error {
-	current, err := s.git.CurrentBranch()
-	if err != nil {
-		return err
-	}
-	members, err := s.disc.DiscoverStack(current, s.disambiguate)
-	if err != nil {
-		return err
-	}
 	ew := &writer{w: w}
-	for _, m := range members {
-		if m.BranchName == s.disc.BaseBranch() {
-			continue
-		}
-		ew.printf("Pulling %s... ", m.BranchName)
-		if err := s.git.Checkout(m.BranchName); err != nil {
-			ew.printf("\n")
-			return fmt.Errorf("checkout %s: %w", m.BranchName, err)
+	return s.forEachBranch(w, true, func(branch, _ string) error {
+		ew.printf("Pulling %s... ", branch)
+		if err := s.git.Checkout(branch); err != nil {
+			return fmt.Errorf("checkout %s failed: %w", branch, err)
 		}
 		if err := s.git.Pull(); err != nil {
-			ew.printf("\n")
-			return fmt.Errorf(
-				"pull %s: %w\nresolve conflicts, then re-run git-stack pull",
-				m.BranchName,
-				err,
-			)
+			return fmt.Errorf("pull %s failed: %w", branch, err)
 		}
 		ew.printf("done\n")
-	}
-	if err := s.git.Checkout(current); err != nil {
-		return fmt.Errorf("restoring branch %s: %w", current, err)
-	}
-	return nil
+		return nil
+	})
 }

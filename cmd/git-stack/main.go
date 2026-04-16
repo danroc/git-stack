@@ -16,8 +16,9 @@ var baseBranch string
 
 func main() {
 	root := &cobra.Command{
-		Use:   "git-stack",
-		Short: "Manage stacks of interdependent Git branches",
+		Use:          "git-stack",
+		Short:        "Manage stacks of interdependent Git branches",
+		SilenceUsage: true,
 	}
 	root.PersistentFlags().
 		StringVar(&baseBranch, "base", "", "base branch (default: auto-detect)")
