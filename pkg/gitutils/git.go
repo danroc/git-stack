@@ -50,12 +50,6 @@ func isExitCode(err error, code int) bool {
 	return errors.As(err, &exitErr) && exitErr.ExitCode() == code
 }
 
-// RunRaw exposes the low-level run method for one-off commands that don't warrant a
-// dedicated method.
-func (g *Git) RunRaw(args ...string) (string, error) {
-	return g.run(args...)
-}
-
 // CurrentBranch returns the short name of HEAD (e.g. "main"), or "HEAD" if detached.
 func (g *Git) CurrentBranch() (string, error) {
 	return g.run("rev-parse", "--abbrev-ref", "HEAD")

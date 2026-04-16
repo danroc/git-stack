@@ -21,20 +21,10 @@ type GitOps interface {
 	Rebase(onto string) error
 }
 
-// Discoverer resolves the ordered branch list for a stack. Satisfied by
-// *engine.DiscoveryEngine in production and by fakes in tests.
-type Discoverer interface {
-	DiscoverStack(
-		current string,
-		disambiguate engine.DisambiguateFn,
-	) ([]engine.StackMember, error)
-	BaseBranch() string
-}
-
 // Stack orchestrates push/pull/rebase across every branch in a discovered stack.
 type Stack struct {
 	git          GitOps
-	disc         Discoverer
+	disc         *engine.DiscoveryEngine
 	disambiguate engine.DisambiguateFn
 }
 
@@ -70,15 +60,6 @@ func New(git *gitutils.Git, base string) (*Stack, error) {
 		disc:         disc,
 		disambiguate: ui.Disambiguate,
 	}, nil
-}
-
-// NewWithDeps constructs a Stack with explicit collaborators. Intended for tests.
-func NewWithDeps(
-	git GitOps,
-	disc Discoverer,
-	disambiguate engine.DisambiguateFn,
-) *Stack {
-	return &Stack{git: git, disc: disc, disambiguate: disambiguate}
 }
 
 // Push pushes every non-base branch in the stack, bottom-to-top.
