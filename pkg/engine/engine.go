@@ -80,26 +80,24 @@ func (e *DiscoveryEngine) DiscoverStack(
 	currentBranch string,
 	disambiguate DisambiguateFn,
 ) ([]StackMember, error) {
-	g := e.graph
-
-	currentHead, ok := g.HeadOf(currentBranch)
+	currentHead, ok := e.graph.HeadOf(currentBranch)
 	if !ok {
 		return nil, fmt.Errorf("branch %q not found in graph", currentBranch)
 	}
-	baseHead, _ := g.HeadOf(e.baseBranch)
+	baseHead, _ := e.graph.HeadOf(e.baseBranch)
 
 	// --- Upward trace: walk first-parent from currentHead toward base ---
-	//
+
 	// Collect branch-head commits newest-to-oldest, then reverse.
 	ancestors := []StackMember{{BranchName: e.baseBranch, CommitHash: baseHead}}
 	if currentBranch != e.baseBranch {
 		var chain []StackMember
 		h := currentHead
-		for g.Contains(h) {
-			if branch, ok := g.BranchAt(h); ok {
+		for e.graph.Contains(h) {
+			if branch, ok := e.graph.BranchAt(h); ok {
 				chain = append(chain, StackMember{BranchName: branch, CommitHash: h})
 			}
-			p, ok := g.FirstParent(h)
+			p, ok := e.graph.FirstParent(h)
 			if !ok {
 				break
 			}
@@ -120,7 +118,7 @@ func (e *DiscoveryEngine) DiscoverStack(
 	}
 
 	// --- Downward trace: branches built on top of currentBranch ---
-	descendants, err := e.traceDescendants(currentBranch, g, disambiguate)
+	descendants, err := e.traceDescendants(currentBranch, e.graph, disambiguate)
 	if err != nil {
 		return nil, err
 	}
