@@ -84,7 +84,11 @@ func (e *DiscoveryEngine) DiscoverStack(
 	if !ok {
 		return nil, fmt.Errorf("branch %q not found in graph", currentBranch)
 	}
-	baseHead, _ := e.graph.HeadOf(e.baseBranch)
+
+	baseHead, ok := e.graph.HeadOf(e.baseBranch)
+	if !ok {
+		return nil, fmt.Errorf("base branch %q not found in graph", e.baseBranch)
+	}
 
 	// --- Upward trace: walk first-parent from currentHead toward base ---
 
@@ -118,7 +122,7 @@ func (e *DiscoveryEngine) DiscoverStack(
 	}
 
 	// --- Downward trace: branches built on top of currentBranch ---
-	descendants, err := e.traceDescendants(currentBranch, e.graph, disambiguate)
+	descendants, err := e.traceDescendants(currentBranch, disambiguate)
 	if err != nil {
 		return nil, err
 	}
@@ -128,22 +132,21 @@ func (e *DiscoveryEngine) DiscoverStack(
 
 func (e *DiscoveryEngine) traceDescendants(
 	branch string,
-	g *gitutils.Graph,
 	disambiguate DisambiguateFn,
 ) ([]StackMember, error) {
-	above := e.branchesAbove(branch, g)
+	above := e.branchesAbove(branch)
 	if len(above) == 0 {
 		return nil, nil
 	}
 
-	direct := filterDirectChildren(above, g)
+	direct := e.filterDirectChildren(above)
 	chosen, err := selectOne(direct, disambiguate)
 	if err != nil {
 		return nil, err
 	}
 
-	chosenHash, _ := g.HeadOf(chosen)
-	rest, err := e.traceDescendants(chosen, g, disambiguate)
+	chosenHash, _ := e.graph.HeadOf(chosen)
+	rest, err := e.traceDescendants(chosen, disambiguate)
 	if err != nil {
 		return nil, err
 	}
@@ -155,29 +158,27 @@ func (e *DiscoveryEngine) traceDescendants(
 // BuildTree constructs the full branch tree rooted at the base branch. Unlike
 // DiscoverStack, it never prompts, all descendants are included.
 func (e *DiscoveryEngine) BuildTree() (*TreeNode, error) {
-	g := e.graph
-
-	baseHead, _ := g.HeadOf(e.baseBranch)
+	baseHead, _ := e.graph.HeadOf(e.baseBranch)
 	root := &TreeNode{
 		Member: StackMember{BranchName: e.baseBranch, CommitHash: baseHead},
 	}
-	if err := e.buildChildren(root, g); err != nil {
+	if err := e.buildChildren(root); err != nil {
 		return nil, err
 	}
 	return root, nil
 }
 
-func (e *DiscoveryEngine) buildChildren(node *TreeNode, g *gitutils.Graph) error {
-	for _, child := range filterDirectChildren(
-		e.branchesAbove(node.Member.BranchName, g), g,
+func (e *DiscoveryEngine) buildChildren(node *TreeNode) error {
+	for _, child := range e.filterDirectChildren(
+		e.branchesAbove(node.Member.BranchName),
 	) {
-		childHash, _ := g.HeadOf(child)
+		childHash, _ := e.graph.HeadOf(child)
 		childNode := &TreeNode{
 			Member:       StackMember{BranchName: child, CommitHash: childHash},
-			CommitsAhead: g.CommitsAhead(node.Member.CommitHash, childHash),
+			CommitsAhead: e.graph.CommitsAhead(node.Member.CommitHash, childHash),
 		}
 		node.Children = append(node.Children, childNode)
-		if err := e.buildChildren(childNode, g); err != nil {
+		if err := e.buildChildren(childNode); err != nil {
 			return err
 		}
 	}
@@ -186,24 +187,23 @@ func (e *DiscoveryEngine) buildChildren(node *TreeNode, g *gitutils.Graph) error
 
 // branchesAbove returns all branches (excluding parent and baseBranch itself) whose
 // HEAD is above parent in the commit graph.
-func (e *DiscoveryEngine) branchesAbove(parent string, g *gitutils.Graph) []string {
-	parentHead, _ := g.HeadOf(parent)
+func (e *DiscoveryEngine) branchesAbove(parent string) []string {
+	parentHead, _ := e.graph.HeadOf(parent)
 	var result []string
-	for _, branch := range g.Branches() {
+	for _, branch := range e.graph.Branches() {
 		if branch == parent || branch == e.baseBranch {
 			continue
 		}
-		head, ok := g.HeadOf(branch)
+		head, ok := e.graph.HeadOf(branch)
 		if !ok {
 			continue
 		}
 		if parent == e.baseBranch {
-			// Any branch whose HEAD is in the graph has commits above base.
-			if g.Contains(head) {
+			if e.graph.Contains(head) {
 				result = append(result, branch)
 			}
 		} else {
-			if g.IsAncestor(parentHead, head) {
+			if e.graph.IsAncestor(parentHead, head) {
 				result = append(result, branch)
 			}
 		}
@@ -220,18 +220,17 @@ func selectOne(choices []string, disambiguate DisambiguateFn) (string, error) {
 
 // filterDirectChildren returns the subset of candidates that have no other candidate
 // sitting between them and their common ancestor.
-func filterDirectChildren(candidates []string, g *gitutils.Graph) []string {
+func (e *DiscoveryEngine) filterDirectChildren(candidates []string) []string {
 	var direct []string
 	for _, c := range candidates {
-		cHead, _ := g.HeadOf(c)
+		cHead, _ := e.graph.HeadOf(c)
 		isDirect := true
 		for _, other := range candidates {
 			if other == c {
 				continue
 			}
-			otherHead, _ := g.HeadOf(other)
-			// If other is an ancestor of c, then c is not a direct child.
-			if g.IsAncestor(otherHead, cHead) {
+			otherHead, _ := e.graph.HeadOf(other)
+			if e.graph.IsAncestor(otherHead, cHead) {
 				isDirect = false
 				break
 			}
