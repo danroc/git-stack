@@ -28,7 +28,10 @@ type DiscoveryEngine struct {
 }
 
 // NewDiscoveryEngine creates an engine that discovers stacks relative to baseBranch.
-func NewDiscoveryEngine(git *gitutils.Git, baseBranch string) (*DiscoveryEngine, error) {
+func NewDiscoveryEngine(
+	git *gitutils.Git,
+	baseBranch string,
+) (*DiscoveryEngine, error) {
 	graph, err := git.LoadGraph(baseBranch)
 	if err != nil {
 		return nil, fmt.Errorf("loading commit graph: %w", err)
@@ -152,8 +155,7 @@ func (e *DiscoveryEngine) traceDescendants(
 }
 
 // BuildTree constructs the full branch tree rooted at the base branch. Unlike
-// DiscoverStack, it never prompts — all descendants are included. Each TreeNode carries
-// the CommitsAhead count relative to its parent.
+// DiscoverStack, it never prompts, all descendants are included.
 func (e *DiscoveryEngine) BuildTree() (*TreeNode, error) {
 	g := e.graph
 
