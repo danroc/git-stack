@@ -156,7 +156,7 @@ func TestWorktreeGitOps_CheckoutLocalBranch(t *testing.T) {
 
 	w := newWorktreeGitOps(primary, map[string]string{
 		"main": "/repo",
-	}, "/repo", func(dir string) GitOps {
+	}, "/repo", func(_ string) GitOps {
 		t.Fatal("should not create remote git for local branch")
 		return nil
 	})
@@ -185,7 +185,7 @@ func TestWorktreeGitOps_PushAlwaysPrimary(t *testing.T) {
 	w := newWorktreeGitOps(primary, map[string]string{
 		"main":   "/repo",
 		"feat-1": "/repo-feat",
-	}, "/repo", func(dir string) GitOps {
+	}, "/repo", func(_ string) GitOps {
 		return remote
 	})
 
@@ -210,7 +210,7 @@ func TestWorktreeGitOps_CurrentBranchAlwaysPrimary(t *testing.T) {
 
 	w := newWorktreeGitOps(primary, map[string]string{
 		"feat-1": "/repo-feat",
-	}, "/repo", func(dir string) GitOps {
+	}, "/repo", func(_ string) GitOps {
 		return &fakeGitOps{currentBranch: "feat-1"}
 	})
 
@@ -229,7 +229,7 @@ func TestWorktreeGitOps_CheckoutSameWorktree(t *testing.T) {
 
 	w := newWorktreeGitOps(primary, map[string]string{
 		"main": "/repo",
-	}, "/repo", func(dir string) GitOps {
+	}, "/repo", func(_ string) GitOps {
 		t.Fatal("should not create remote git for same worktree")
 		return nil
 	})
