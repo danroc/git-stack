@@ -29,23 +29,34 @@ func main() {
 	}
 }
 
-// setup resolves the base branch (from --base flag or auto-detection) and returns the
-// shared Git adapter, base name, and a DiscoveryEngine ready to use.
-func setup() (*gitutils.Git, string, *engine.DiscoveryEngine, error) {
+// resolveBase returns a Git adapter and the base branch name (from --base flag or
+// auto-detection).
+func resolveBase() (*gitutils.Git, string, error) {
 	git := gitutils.NewGit(".")
 	base := baseBranch
 	if base == "" {
 		var err error
 		base, err = engine.DetectBaseBranch(git)
 		if err != nil {
-			return nil, "", nil, err
+			return nil, "", err
 		}
 	}
-	disc, err := engine.NewDiscoveryEngine(git, base)
-	if err != nil {
-		return nil, "", nil, err
+	return git, base, nil
+}
+
+// runStackCmd is a RunE handler that resolves the base, builds a Stack, and calls fn.
+func runStackCmd(fn func(*stack.Stack) error) func(*cobra.Command, []string) error {
+	return func(_ *cobra.Command, _ []string) error {
+		git, base, err := resolveBase()
+		if err != nil {
+			return err
+		}
+		s, err := stack.New(git, base)
+		if err != nil {
+			return err
+		}
+		return fn(s)
 	}
-	return git, base, disc, nil
 }
 
 func cmdAdd() *cobra.Command {
@@ -64,7 +75,11 @@ func cmdView() *cobra.Command {
 		Use:   "view",
 		Short: "Show the full stack tree",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			git, _, disc, err := setup()
+			git, base, err := resolveBase()
+			if err != nil {
+				return err
+			}
+			disc, err := engine.NewDiscoveryEngine(git, base)
 			if err != nil {
 				return err
 			}
@@ -97,17 +112,7 @@ func cmdPush() *cobra.Command {
 	return &cobra.Command{
 		Use:   "push",
 		Short: "Push all branches in the stack to their upstreams",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			git, base, _, err := setup()
-			if err != nil {
-				return err
-			}
-			s, err := stack.New(git, base)
-			if err != nil {
-				return err
-			}
-			return s.Push(os.Stdout)
-		},
+		RunE:  runStackCmd(func(s *stack.Stack) error { return s.Push(os.Stdout) }),
 	}
 }
 
@@ -115,17 +120,7 @@ func cmdPull() *cobra.Command {
 	return &cobra.Command{
 		Use:   "pull",
 		Short: "Pull all branches in the stack from their upstreams",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			git, base, _, err := setup()
-			if err != nil {
-				return err
-			}
-			s, err := stack.New(git, base)
-			if err != nil {
-				return err
-			}
-			return s.Pull(os.Stdout)
-		},
+		RunE:  runStackCmd(func(s *stack.Stack) error { return s.Pull(os.Stdout) }),
 	}
 }
 
@@ -133,16 +128,6 @@ func cmdRebase() *cobra.Command {
 	return &cobra.Command{
 		Use:   "rebase",
 		Short: "Rebase each branch in the stack onto the tip of its parent, bottom-to-top",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			git, base, _, err := setup()
-			if err != nil {
-				return err
-			}
-			s, err := stack.New(git, base)
-			if err != nil {
-				return err
-			}
-			return s.Rebase(os.Stdout)
-		},
+		RunE:  runStackCmd(func(s *stack.Stack) error { return s.Rebase(os.Stdout) }),
 	}
 }
