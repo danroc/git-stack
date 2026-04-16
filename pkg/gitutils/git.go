@@ -51,7 +51,7 @@ func isExitCode(err error, code int) bool {
 }
 
 // RunRaw exposes the low-level run method for one-off commands that don't warrant a
-// dedicated method (e.g. symbolic-ref lookups in DetectBaseBranch).
+// dedicated method.
 func (g *Git) RunRaw(args ...string) (string, error) {
 	return g.run(args...)
 }
@@ -73,20 +73,10 @@ func (g *Git) ListBranches() ([]string, error) {
 	return strings.Split(out, "\n"), nil
 }
 
-// IsAncestor reports whether ancestor is reachable from descendant.
-func (g *Git) IsAncestor(ancestor, descendant string) (bool, error) {
-	_, err := g.run("merge-base", "--is-ancestor", ancestor, descendant)
-	if err == nil {
-		return true, nil
-	}
-	if isExitCode(err, 1) {
-		return false, nil
-	}
-	return false, err
-}
-
-// Checkout switches to the specified branch. Will fail if the branch is checked out in
-// another worktree; see worktreeGitOps for that case.
+// Checkout switches to the specified branch.
+//
+// Will fail if the branch is checked out in another worktree, see worktreeGitOps for
+// that case.
 func (g *Git) Checkout(branch string) error {
 	_, err := g.run("checkout", branch)
 	return err
@@ -133,22 +123,20 @@ func (g *Git) Push(branch string) error {
 	return err
 }
 
-// Pull runs pull --rebase on the currently checked-out branch. On conflict it leaves
-// the rebase in-progress so the caller can guide the user to resolve it.
+// Pull runs `git pull --rebase` on the currently checked-out branch.
 func (g *Git) Pull() error {
 	_, err := g.run("pull", "--rebase")
 	return err
 }
 
-// Rebase rebases the current branch onto the given target. Like Pull, a conflict leaves
-// the rebase in-progress for manual resolution.
+// Rebase rebases the current branch onto the given target.
 func (g *Git) Rebase(onto string) error {
 	_, err := g.run("rebase", onto)
 	return err
 }
 
 // WorktreeList returns branch → absolute worktree path for every worktree that has a
-// branch checked out. Detached-HEAD and bare worktrees are excluded.
+// branch checked out.
 func (g *Git) WorktreeList() (map[string]string, error) {
 	out, err := g.run("worktree", "list", "--porcelain")
 	if err != nil {
@@ -158,8 +146,6 @@ func (g *Git) WorktreeList() (map[string]string, error) {
 }
 
 // ParseWorktreeList parses the porcelain output of `git worktree list --porcelain`.
-// Format: newline-separated stanzas, each containing "worktree <path>", "HEAD <hash>",
-// and either "branch refs/heads/<name>" or "detached".
 //
 // See: https://git-scm.com/docs/git-worktree#_porcelain_format
 func ParseWorktreeList(output string) map[string]string {
@@ -187,8 +173,7 @@ func ParseWorktreeList(output string) map[string]string {
 	return result
 }
 
-// CommitsAhead returns the number of commits reachable from branch but not from parent
-// (i.e. how far branch is ahead of parent).
+// CommitsAhead returns the number of commits reachable from branch but not from parent.
 func (g *Git) CommitsAhead(parent, branch string) (int, error) {
 	out, err := g.run("rev-list", "--count", parent+".."+branch)
 	if err != nil {
