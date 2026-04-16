@@ -3,34 +3,37 @@ package engine
 
 import (
 	"fmt"
-	"strings"
 
 	"git-stack/pkg/gitutils"
 )
 
-// StackMember is a branch name paired with its HEAD hash at discovery time.
+// StackMember is a branch name paired with its HEAD hash.
 type StackMember struct {
 	BranchName string
 	CommitHash string
 }
 
 // DisambiguateFn is called when multiple direct-child branches are found at a
-// bifurcation point. It receives the action being performed and the candidate branch
-// names, and returns the chosen branch name.
+// bifurcation point.
+//
+// It receives the action being performed and the candidate branch names, and returns
+// the chosen branch name.
 type DisambiguateFn func(action string, choices []string) (string, error)
 
 // DiscoveryEngine identifies stack lineage using a commit graph loaded once from git
 // and then queried in-process.
 type DiscoveryEngine struct {
-	git        *gitutils.Git
 	baseBranch string
-	graph      *gitutils.Graph // lazily populated on first use
+	graph      *gitutils.Graph
 }
 
 // NewDiscoveryEngine creates an engine that discovers stacks relative to baseBranch.
-// The commit graph is loaded lazily on first query.
-func NewDiscoveryEngine(git *gitutils.Git, baseBranch string) *DiscoveryEngine {
-	return &DiscoveryEngine{git: git, baseBranch: baseBranch}
+func NewDiscoveryEngine(git *gitutils.Git, baseBranch string) (*DiscoveryEngine, error) {
+	graph, err := git.LoadGraph(baseBranch)
+	if err != nil {
+		return nil, fmt.Errorf("loading commit graph: %w", err)
+	}
+	return &DiscoveryEngine{baseBranch: baseBranch, graph: graph}, nil
 }
 
 // BaseBranch returns the base branch that anchors the bottom of every stack.
@@ -38,70 +41,29 @@ func (e *DiscoveryEngine) BaseBranch() string {
 	return e.baseBranch
 }
 
-// getGraph loads the commit graph on first call and caches it.
-func (e *DiscoveryEngine) getGraph() (*gitutils.Graph, error) {
-	if e.graph == nil {
-		var err error
-		e.graph, err = e.git.LoadGraph(e.baseBranch)
-		if err != nil {
-			return nil, fmt.Errorf("loading commit graph: %w", err)
-		}
-	}
-	return e.graph, nil
-}
-
-// DetectBaseBranch finds the base branch by inspecting the git graph.
+// DetectBaseBranch returns the base branch by checking for well-known defaults.
 //
-// It first checks refs/remotes/origin/HEAD (the remote's recorded default branch,
-// stored locally — no network call). If that is unavailable it falls back to a graph
-// heuristic: the local branch that the most other branches descend from (measured by
-// CommitsAhead).
+// It looks for "main" then "master" among local branches. If neither exists, it returns
+// an error asking the user to specify --base explicitly.
 func DetectBaseBranch(git *gitutils.Git) (string, error) {
-	// Primary: remote default branch recorded in local git metadata.
-	if ref, err := git.RunRaw("symbolic-ref", "refs/remotes/origin/HEAD"); err == nil {
-		const prefix = "refs/remotes/origin/"
-		if strings.HasPrefix(ref, prefix) {
-			return strings.TrimPrefix(ref, prefix), nil
-		}
-	}
-
-	// Fallback: the branch that the most other branches have commits ahead of.
 	branches, err := git.ListBranches()
 	if err != nil {
 		return "", err
 	}
 
-	best, bestCount := "", -1
-	for _, b := range branches {
-		count := 0
-		for _, other := range branches {
-			if other == b {
-				continue
-			}
-			ahead, err := git.CommitsAhead(b, other)
-			if err != nil {
-				continue
-			}
-			if ahead > 0 {
-				count++
-			}
-		}
-		if count > bestCount {
-			bestCount = count
-			best = b
+	for _, branch := range branches {
+		if branch == "main" || branch == "master" {
+			return branch, nil
 		}
 	}
 
-	if best != "" && bestCount > 0 {
-		return best, nil
-	}
 	return "", fmt.Errorf("unable to detect base branch; use --base to specify")
 }
 
 // TreeNode is a node in the full branch tree built by BuildTree.
 type TreeNode struct {
 	Member       StackMember
-	CommitsAhead int // commits ahead of the immediate parent; 0 for the base node
+	CommitsAhead int
 	Children     []*TreeNode
 }
 
@@ -115,10 +77,7 @@ func (e *DiscoveryEngine) DiscoverStack(
 	currentBranch string,
 	disambiguate DisambiguateFn,
 ) ([]StackMember, error) {
-	g, err := e.getGraph()
-	if err != nil {
-		return nil, err
-	}
+	g := e.graph
 
 	currentHead, ok := g.HeadOf(currentBranch)
 	if !ok {
@@ -196,10 +155,7 @@ func (e *DiscoveryEngine) traceDescendants(
 // DiscoverStack, it never prompts — all descendants are included. Each TreeNode carries
 // the CommitsAhead count relative to its parent.
 func (e *DiscoveryEngine) BuildTree() (*TreeNode, error) {
-	g, err := e.getGraph()
-	if err != nil {
-		return nil, err
-	}
+	g := e.graph
 
 	baseHead, _ := g.HeadOf(e.baseBranch)
 	root := &TreeNode{

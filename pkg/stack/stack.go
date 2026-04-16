@@ -53,7 +53,7 @@ func (ew *writer) printf(format string, args ...any) {
 // New constructs a Stack using the provided Git adapter and base branch,
 // wiring the interactive disambiguation prompt. If other worktrees are
 // detected, git operations are wrapped to handle branches checked out there.
-func New(git *gitutils.Git, base string) *Stack {
+func New(git *gitutils.Git, base string) (*Stack, error) {
 	var ops GitOps = git
 	if wts, err := git.WorktreeList(); err == nil && len(wts) > 1 {
 		cwd, _ := filepath.Abs(".")
@@ -61,11 +61,15 @@ func New(git *gitutils.Git, base string) *Stack {
 			return gitutils.NewGit(dir)
 		})
 	}
+	disc, err := engine.NewDiscoveryEngine(git, base)
+	if err != nil {
+		return nil, err
+	}
 	return &Stack{
 		git:          ops,
-		disc:         engine.NewDiscoveryEngine(git, base),
+		disc:         disc,
 		disambiguate: ui.Disambiguate,
-	}
+	}, nil
 }
 
 // NewWithDeps constructs a Stack with explicit collaborators. Intended for tests.

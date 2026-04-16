@@ -41,7 +41,11 @@ func setup() (*gitutils.Git, string, *engine.DiscoveryEngine, error) {
 			return nil, "", nil, err
 		}
 	}
-	return git, base, engine.NewDiscoveryEngine(git, base), nil
+	disc, err := engine.NewDiscoveryEngine(git, base)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	return git, base, disc, nil
 }
 
 func cmdAdd() *cobra.Command {
@@ -101,7 +105,11 @@ func cmdPush() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return stack.New(git, base).Push(os.Stdout)
+			s, err := stack.New(git, base)
+			if err != nil {
+				return err
+			}
+			return s.Push(os.Stdout)
 		},
 	}
 }
@@ -115,7 +123,11 @@ func cmdPull() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return stack.New(git, base).Pull(os.Stdout)
+			s, err := stack.New(git, base)
+			if err != nil {
+				return err
+			}
+			return s.Pull(os.Stdout)
 		},
 	}
 }
@@ -129,7 +141,11 @@ func cmdRebase() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return stack.New(git, base).Rebase(os.Stdout)
+			s, err := stack.New(git, base)
+			if err != nil {
+				return err
+			}
+			return s.Rebase(os.Stdout)
 		},
 	}
 }
