@@ -74,10 +74,10 @@ type TreeNode struct {
 
 // DiscoverStack identifies the full linear stack that contains currentBranch.
 //
-// The upward trace (base → currentBranch) walks the first-parent chain in the commit
-// graph, collecting commits that are branch heads. The downward trace (branches above
-// currentBranch) uses graph ancestry queries. chooseBranch is called if a bifurcation
-// is found.
+// Two passes build the result. The first (base → currentBranch) walks the first-parent
+// chain collecting branch heads from the bottom up. The second (currentBranch → tip)
+// follows graph ancestry to find branches stacked above currentBranch, calling
+// chooseBranch at any bifurcation.
 func (e *Engine) DiscoverStack(
 	currentBranch string,
 	chooseBranch ChooseBranchFn,
@@ -198,12 +198,13 @@ func (e *Engine) buildChildren(node *TreeNode) {
 	}
 }
 
-// directChildren returns branches above parent, with no intermediate branch between
-// them. Also checks git config for diverged branches and persists discoveries.
+// directChildren returns branches stacked directly on top of parent: one level above it
+// with no intermediate branch between them. Also checks git config for diverged
+// branches and persists discoveries.
 func (e *Engine) directChildren(parent string) []string {
 	parentHead, _ := e.graph.HeadOf(parent)
 
-	// Collect all branches above parent via graph ancestry.
+	// Collect all branches stacked on top of parent (further from base).
 	aboveSet := make(map[string]bool)
 	for _, branch := range e.graph.Branches() {
 		if branch == parent || branch == e.baseBranch {
