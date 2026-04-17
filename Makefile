@@ -11,15 +11,8 @@ ROOT_DIR    := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 DIST_DIR    := $(ROOT_DIR)/dist
 INSTALL_DIR := $(HOME)/.local/bin
 
-# Version components from git
-COMMIT  := $(shell git describe --always --dirty --exclude='*')
-TAG     := $(shell git tag --points-at HEAD --sort=-v:refname 'v*' | head -n1)
-VERSION := $(or $(patsubst v%,%,$(TAG)),dev)
-
 # Build flags
-LDFLAGS := -X 'git-stack/internal/version.Version=$(VERSION)'
-LDFLAGS += -X 'git-stack/internal/version.Commit=$(COMMIT)'
-LDFLAGS += -s -w
+LDFLAGS := -s -w
 
 # Colors
 BLUE    := \033[34m
