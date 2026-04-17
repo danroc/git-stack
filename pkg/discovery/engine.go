@@ -86,10 +86,12 @@ func (e *Engine) DiscoverStack(
 	if err != nil {
 		return nil, err
 	}
+
 	descendants, err := e.traceDescendants(currentBranch, chooseBranch)
 	if err != nil {
 		return nil, err
 	}
+
 	return append(ancestors, descendants...), nil
 }
 
