@@ -41,14 +41,14 @@ func (ew *writer) printf(format string, args ...any) {
 	}
 }
 
-// New constructs a Stack using the provided Git adapter and base branch,
-// wiring the interactive disambiguation prompt. If other worktrees are
-// detected, git operations are wrapped to handle branches checked out there.
+// New constructs a Stack using the provided Git adapter and base branch, wiring the
+// interactive disambiguation prompt. If other worktrees are detected, git operations
+// are wrapped to handle branches checked out there.
 func New(g *git.Client, base string) (*Stack, error) {
 	var ops Repository = g
-	if wts, err := g.WorktreeList(); err == nil && len(wts) > 1 {
+	if worktrees, err := g.WorktreeList(); err == nil && len(worktrees) > 1 {
 		cwd, _ := filepath.Abs(".")
-		ops = newWorktreeGitOps(g, wts, cwd, func(dir string) Repository {
+		ops = newWorktreeGitOps(g, worktrees, cwd, func(dir string) Repository {
 			return git.NewClient(dir)
 		})
 	}
@@ -73,13 +73,13 @@ func writeGitErr(w *writer, err error) {
 	}
 }
 
-// branchAction is called for each non-base branch in the stack. It receives the
-// branch name, its parent's name, and the index in the member list.
+// branchAction is called for each non-base branch in the stack. It receives the branch
+// name, its parent's name, and the index in the member list.
 type branchAction func(branch, parent string) error
 
-// forEachBranch discovers the stack, iterates non-base members bottom-to-top,
-// and calls action for each. If restoreBranch is true, the original branch is
-// checked out after all actions succeed.
+// forEachBranch discovers the stack, iterates non-base members bottom-to-top, and calls
+// action for each. If restoreBranch is true, the original branch is checked out after
+// all actions succeed.
 func (s *Stack) forEachBranch(
 	w io.Writer,
 	restoreBranch bool,
@@ -96,12 +96,12 @@ func (s *Stack) forEachBranch(
 	}
 
 	ew := &writer{w: w}
-	for i, m := range members {
-		if m.BranchName == s.disc.BaseBranch() {
+	for i, member := range members {
+		if member.BranchName == s.disc.BaseBranch() {
 			continue
 		}
 		parent := members[i-1].BranchName
-		if err := action(m.BranchName, parent); err != nil {
+		if err := action(member.BranchName, parent); err != nil {
 			writeGitErr(ew, err)
 			return err
 		}
@@ -128,9 +128,9 @@ func (s *Stack) Push(w io.Writer) error {
 	})
 }
 
-// Rebase rebases each non-base branch onto the current tip of its immediate
-// parent, bottom-to-top. On conflict it halts and leaves the repository in the
-// in-progress rebase state. On full success it restores the original branch.
+// Rebase rebases each non-base branch onto the current tip of its immediate parent,
+// bottom-to-top. On conflict it halts and leaves the repository in the in-progress
+// rebase state. On full success it restores the original branch.
 func (s *Stack) Rebase(w io.Writer) error {
 	ew := &writer{w: w}
 	return s.forEachBranch(w, true, func(branch, parent string) error {
@@ -146,9 +146,9 @@ func (s *Stack) Rebase(w io.Writer) error {
 	})
 }
 
-// Pull checks out and pulls (--rebase) every non-base branch in order.
-// On failure it halts and leaves the repo on the failing branch so the user
-// can resolve conflicts and re-run. On full success it restores the original branch.
+// Pull checks out and pulls (--rebase) every non-base branch in order. On failure it
+// halts and leaves the repo on the failing branch so the user can resolve conflicts and
+// re-run. On full success it restores the original branch.
 func (s *Stack) Pull(w io.Writer) error {
 	ew := &writer{w: w}
 	return s.forEachBranch(w, true, func(branch, _ string) error {

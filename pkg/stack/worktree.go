@@ -2,18 +2,18 @@ package stack
 
 import "fmt"
 
-// worktreeGitOps wraps a Repository and transparently handles branches that are
-// checked out in other git worktrees. When Checkout is called for such a
-// branch, it switches the active Repository to one scoped to that worktree's
-// directory (skipping the actual checkout since the branch is already active
-// there). Pull and Rebase then run against the active instance.
+// worktreeGitOps wraps a Repository and transparently handles branches that are checked
+// out in other git worktrees. When Checkout is called for such a branch, it switches
+// the active Repository to one scoped to that worktree's directory (skipping the actual
+// checkout since the branch is already active there). Pull and Rebase then run against
+// the active instance.
 type worktreeGitOps struct {
 	primary    Repository
-	worktrees  map[string]string          // branch name → worktree absolute path
-	currentDir string                     // absolute path of the primary worktree
+	worktrees  map[string]string           // branch name → worktree absolute path
+	currentDir string                      // absolute path of the primary worktree
 	newGit     func(dir string) Repository // factory for creating directory-scoped Repository
-	active     Repository                 // the Repository that Pull/Rebase should use
-	activeDir  string                     // path of the active worktree ("" = primary)
+	active     Repository                  // the Repository that Pull/Rebase should use
+	activeDir  string                      // path of the active worktree ("" = primary)
 }
 
 func newWorktreeGitOps(

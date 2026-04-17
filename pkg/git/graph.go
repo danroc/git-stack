@@ -52,7 +52,10 @@ func (g *Client) listBranchHeads() (map[string]string, error) {
 	return heads, nil
 }
 
-func (g *Client) buildGraph(baseBranch string, heads map[string]string) (*Graph, error) {
+func (g *Client) buildGraph(
+	baseBranch string,
+	heads map[string]string,
+) (*Graph, error) {
 	graph := &Graph{
 		parents:  make(map[string][]string),
 		heads:    heads,

@@ -103,8 +103,8 @@ func cmdView() *cobra.Command {
 	}
 }
 
-// buildDisplayTree maps discovery nodes to ui nodes. CommitsAhead is already computed by
-// the engine so this is a pure structural conversion.
+// buildDisplayTree maps discovery nodes to ui nodes. CommitsAhead is already computed
+// by the engine so this is a pure structural conversion.
 func buildDisplayTree(node *discovery.TreeNode, current string) *ui.TreeEntry {
 	entry := &ui.TreeEntry{
 		BranchName: node.Branch.BranchName,

@@ -35,15 +35,15 @@ func (ew *writer) printf(format string, args ...any) {
 
 // RenderTree prints the full stack tree to w.
 func RenderTree(root *TreeEntry, w io.Writer) {
-	p := plainPalette()
+	palette := plainPalette()
 	if f, ok := w.(*os.File); ok {
 		if term.IsTerminal(int(f.Fd())) { //nolint:gosec
-			p = colorPalette()
+			palette = colorPalette()
 		}
 	}
 
-	ew := &writer{w: w, p: p}
-	ew.printf("%s\n", p.formatEntry(root))
+	ew := &writer{w: w, p: palette}
+	ew.printf("%s\n", palette.formatEntry(root))
 	renderChildren(root.Children, "", ew)
 }
 

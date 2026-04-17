@@ -3,6 +3,7 @@ package discovery
 
 import (
 	"fmt"
+	"slices"
 
 	"git-stack/pkg/git"
 )
@@ -81,69 +82,67 @@ func (e *Engine) DiscoverStack(
 	currentBranch string,
 	chooseBranch ChooseBranchFn,
 ) ([]Branch, error) {
+	ancestors, err := e.traceAncestors(currentBranch)
+	if err != nil {
+		return nil, err
+	}
+	descendants, err := e.traceDescendants(currentBranch, chooseBranch)
+	if err != nil {
+		return nil, err
+	}
+	return append(ancestors, descendants...), nil
+}
+
+// traceAncestors returns the chain from base (inclusive) up to currentBranch
+// (inclusive) in bottom-to-top order. It walks the first-parent commit chain for the
+// primary trace, then falls back to stackParent config for any diverged branches the
+// graph walk missed.
+func (e *Engine) traceAncestors(currentBranch string) ([]Branch, error) {
+	baseHead, ok := e.graph.HeadOf(e.baseBranch)
+	if !ok {
+		return nil, fmt.Errorf("base branch %q not found in graph", e.baseBranch)
+	}
 	currentHead, ok := e.graph.HeadOf(currentBranch)
 	if !ok {
 		return nil, fmt.Errorf("branch %q not found in graph", currentBranch)
 	}
 
-	baseHead, ok := e.graph.HeadOf(e.baseBranch)
-	if !ok {
-		return nil, fmt.Errorf("base branch %q not found in graph", e.baseBranch)
-	}
-
-	// --- Upward trace: walk first-parent from currentHead toward base ---
-
-	// Collect branch-head commits newest-to-oldest, then reverse.
 	ancestors := []Branch{{BranchName: e.baseBranch, CommitHash: baseHead}}
-	if currentBranch != e.baseBranch {
-		var chain []Branch
-		h := currentHead
-		for e.graph.Contains(h) {
-			if branch, ok := e.graph.BranchAt(h); ok {
-				chain = append(chain, Branch{BranchName: branch, CommitHash: h})
-			}
-			p, ok := e.graph.FirstParent(h)
-			if !ok {
-				break
-			}
-			h = p
-		}
-		for i := len(chain) - 1; i >= 0; i-- {
-			ancestors = append(ancestors, chain[i])
-		}
-
-		// Config fallback: if graph walk didn't reach currentBranch, follow
-		// stackParent config upward to fill in diverged branches.
-		last := ancestors[len(ancestors)-1].BranchName
-		if last != currentBranch {
-			var configChain []Branch
-			b := currentBranch
-			for b != last && b != e.baseBranch && b != "" {
-				bHead, _ := e.graph.HeadOf(b)
-				configChain = append(configChain, Branch{
-					BranchName: b,
-					CommitHash: bHead,
-				})
-				parent, ok := e.git.GetStackParent(b)
-				if !ok {
-					break
-				}
-				b = parent
-			}
-			// Reverse to get base-to-tip order and append.
-			for i := len(configChain) - 1; i >= 0; i-- {
-				ancestors = append(ancestors, configChain[i])
-			}
-		}
+	if currentBranch == e.baseBranch {
+		return ancestors, nil
 	}
 
-	// --- Downward trace: branches built on top of currentBranch ---
-	descendants, err := e.traceDescendants(currentBranch, chooseBranch)
-	if err != nil {
-		return nil, err
+	var chain []Branch
+	for commit := currentHead; e.graph.Contains(commit); {
+		if branch, ok := e.graph.BranchAt(commit); ok {
+			chain = append(chain, Branch{BranchName: branch, CommitHash: commit})
+		}
+		parent, ok := e.graph.FirstParent(commit)
+		if !ok {
+			break
+		}
+		commit = parent
+	}
+	slices.Reverse(chain)
+	ancestors = append(ancestors, chain...)
+
+	reached := ancestors[len(ancestors)-1].BranchName
+	if reached == currentBranch {
+		return ancestors, nil
 	}
 
-	return append(ancestors, descendants...), nil
+	var fallback []Branch
+	for branch := currentBranch; branch != reached && branch != e.baseBranch && branch != ""; {
+		head, _ := e.graph.HeadOf(branch)
+		fallback = append(fallback, Branch{BranchName: branch, CommitHash: head})
+		parent, ok := e.git.GetStackParent(branch)
+		if !ok {
+			break
+		}
+		branch = parent
+	}
+	slices.Reverse(fallback)
+	return append(ancestors, fallback...), nil
 }
 
 func (e *Engine) traceDescendants(
@@ -214,9 +213,12 @@ func (e *Engine) directChildren(parent string) []string {
 		}
 		if parent == e.baseBranch {
 			if e.graph.Contains(head) {
-				// Skip branches that have a non-base config parent —
-				// they belong under that parent, not directly under base.
-				if cp, ok := e.git.GetStackParent(branch); ok && cp != e.baseBranch {
+				// Skip branches that have a non-base config parent; they belong under
+				// that parent, not directly under base.
+				if configParent, ok := e.git.GetStackParent(
+					branch,
+				); ok &&
+					configParent != e.baseBranch {
 					continue
 				}
 				aboveSet[branch] = true
@@ -228,8 +230,8 @@ func (e *Engine) directChildren(parent string) []string {
 		}
 	}
 
-	// Config fallback: add branches whose stackParent is parent but
-	// weren't found via graph ancestry (diverged branches).
+	// Config fallback: add branches whose stackParent is parent but weren't found via
+	// graph ancestry (diverged branches).
 	for _, branch := range e.graph.Branches() {
 		if aboveSet[branch] || branch == parent || branch == e.baseBranch {
 			continue
@@ -247,21 +249,21 @@ func (e *Engine) directChildren(parent string) []string {
 
 	// Filter to only direct children (no intermediate branch between parent and child).
 	var direct []string
-	for _, c := range above {
-		cHead, _ := e.graph.HeadOf(c)
+	for _, candidate := range above {
+		candidateHead, _ := e.graph.HeadOf(candidate)
 		isDirect := true
 		for _, other := range above {
-			if other == c {
+			if other == candidate {
 				continue
 			}
 			otherHead, _ := e.graph.HeadOf(other)
-			if e.graph.IsAncestor(otherHead, cHead) {
+			if e.graph.IsAncestor(otherHead, candidateHead) {
 				isDirect = false
 				break
 			}
 		}
 		if isDirect {
-			direct = append(direct, c)
+			direct = append(direct, candidate)
 		}
 	}
 
