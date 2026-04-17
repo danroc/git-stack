@@ -257,7 +257,7 @@ func (e *Engine) directChildren(parent string) []string {
 				continue
 			}
 			otherHead, _ := e.graph.HeadOf(other)
-			if e.graph.IsAncestor(otherHead, candidateHead) {
+			if otherHead != parentHead && e.graph.IsAncestor(otherHead, candidateHead) {
 				isDirect = false
 				break
 			}
