@@ -90,6 +90,15 @@ func (g *Client) buildGraph(
 	return graph, nil
 }
 
+// NewGraph constructs a Graph from raw commit data.
+func NewGraph(parents map[string][]string, heads map[string]string) *Graph {
+	branchAt := make(map[string]string, len(heads))
+	for branch, hash := range heads {
+		branchAt[hash] = branch
+	}
+	return &Graph{parents: parents, heads: heads, branchAt: branchAt}
+}
+
 // Contains reports whether hash is in the loaded graph. Commits below the base branch
 // boundary are not loaded, so Contains returns false for them.
 func (g *Graph) Contains(hash string) bool {
