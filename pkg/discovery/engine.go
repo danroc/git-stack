@@ -24,8 +24,8 @@ type ChooseBranchFn func(action string, choices []string) (string, error)
 // Engine identifies stack lineage using a commit graph loaded once from git
 // and then queried in-process.
 type Engine struct {
-	git        *git.Client
 	baseBranch string
+	git        *git.Client
 	graph      *git.Graph
 }
 
