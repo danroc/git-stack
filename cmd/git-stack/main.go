@@ -23,7 +23,7 @@ func main() {
 	root.PersistentFlags().
 		StringVar(&baseBranch, "base", "", "base branch (default: auto-detect)")
 
-	root.AddCommand(cmdAdd(), cmdView(), cmdPush(), cmdPull(), cmdRebase())
+	root.AddCommand(cmdAdd(), cmdParent(), cmdView(), cmdPush(), cmdPull(), cmdRebase())
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
@@ -75,6 +75,28 @@ func cmdAdd() *cobra.Command {
 				return err
 			}
 			return g.SetStackParent(args[0], current)
+		},
+	}
+}
+
+func cmdParent() *cobra.Command {
+	return &cobra.Command{
+		Use:   "parent [branch] <parent>",
+		Short: "Set the parent of a branch (defaults to current branch)",
+		Args:  cobra.RangeArgs(1, 2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			g := git.NewClient(".")
+			var branch, parent string
+			if len(args) == 1 {
+				current, err := g.CurrentBranch()
+				if err != nil {
+					return err
+				}
+				branch, parent = current, args[0]
+			} else {
+				branch, parent = args[0], args[1]
+			}
+			return g.SetStackParent(branch, parent)
 		},
 	}
 }
