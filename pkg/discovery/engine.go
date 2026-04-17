@@ -1,4 +1,4 @@
-// Package discovery implements stack discovery using Git primitives.
+// Package discovery implements branch stack discovery.
 package discovery
 
 import (
@@ -8,10 +8,10 @@ import (
 	"git-stack/pkg/git"
 )
 
-// Branch is a branch name paired with its HEAD hash.
+// Branch is a branch name paired with its hash.
 type Branch struct {
-	BranchName string
-	CommitHash string
+	Name string
+	Hash string
 }
 
 // ChooseBranchFn is called when multiple direct-child branches are found at a
@@ -107,7 +107,7 @@ func (e *Engine) traceAncestors(currentBranch string) ([]Branch, error) {
 		return nil, fmt.Errorf("branch %q not found in graph", currentBranch)
 	}
 
-	ancestors := []Branch{{BranchName: e.baseBranch, CommitHash: baseHead}}
+	ancestors := []Branch{{Name: e.baseBranch, Hash: baseHead}}
 	if currentBranch == e.baseBranch {
 		return ancestors, nil
 	}
@@ -115,7 +115,7 @@ func (e *Engine) traceAncestors(currentBranch string) ([]Branch, error) {
 	var chain []Branch
 	for commit := currentHead; e.graph.Contains(commit); {
 		if branch, ok := e.graph.BranchAt(commit); ok {
-			chain = append(chain, Branch{BranchName: branch, CommitHash: commit})
+			chain = append(chain, Branch{Name: branch, Hash: commit})
 		}
 		parent, ok := e.graph.FirstParent(commit)
 		if !ok {
@@ -126,7 +126,7 @@ func (e *Engine) traceAncestors(currentBranch string) ([]Branch, error) {
 	slices.Reverse(chain)
 	ancestors = append(ancestors, chain...)
 
-	reached := ancestors[len(ancestors)-1].BranchName
+	reached := ancestors[len(ancestors)-1].Name
 	if reached == currentBranch {
 		return ancestors, nil
 	}
@@ -134,7 +134,7 @@ func (e *Engine) traceAncestors(currentBranch string) ([]Branch, error) {
 	var fallback []Branch
 	for branch := currentBranch; branch != reached && branch != e.baseBranch && branch != ""; {
 		head, _ := e.graph.HeadOf(branch)
-		fallback = append(fallback, Branch{BranchName: branch, CommitHash: head})
+		fallback = append(fallback, Branch{Name: branch, Hash: head})
 		parent, ok := e.git.GetStackParent(branch)
 		if !ok {
 			break
@@ -168,7 +168,7 @@ func (e *Engine) traceDescendants(
 		}
 
 		chosenHash, _ := e.graph.HeadOf(chosen)
-		result = append(result, Branch{BranchName: chosen, CommitHash: chosenHash})
+		result = append(result, Branch{Name: chosen, Hash: chosenHash})
 		branch = chosen
 	}
 }
@@ -178,18 +178,18 @@ func (e *Engine) traceDescendants(
 func (e *Engine) BuildTree() *TreeNode {
 	baseHead, _ := e.graph.HeadOf(e.baseBranch)
 	root := &TreeNode{
-		Branch: Branch{BranchName: e.baseBranch, CommitHash: baseHead},
+		Branch: Branch{Name: e.baseBranch, Hash: baseHead},
 	}
 	e.buildChildren(root)
 	return root
 }
 
 func (e *Engine) buildChildren(node *TreeNode) {
-	for _, child := range e.directChildren(node.Branch.BranchName) {
+	for _, child := range e.directChildren(node.Branch.Name) {
 		childHash, _ := e.graph.HeadOf(child)
 		childNode := &TreeNode{
-			Branch:       Branch{BranchName: child, CommitHash: childHash},
-			CommitsAhead: e.graph.CommitsAhead(node.Branch.CommitHash, childHash),
+			Branch:       Branch{Name: child, Hash: childHash},
+			CommitsAhead: e.graph.CommitsAhead(node.Branch.Hash, childHash),
 		}
 		node.Children = append(node.Children, childNode)
 		e.buildChildren(childNode)

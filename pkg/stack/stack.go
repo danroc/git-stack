@@ -97,11 +97,11 @@ func (s *Stack) forEachBranch(
 
 	ew := &writer{w: w}
 	for i, member := range members {
-		if member.BranchName == s.disc.BaseBranch() {
+		if member.Name == s.disc.BaseBranch() {
 			continue
 		}
-		parent := members[i-1].BranchName
-		if err := action(member.BranchName, parent); err != nil {
+		parent := members[i-1].Name
+		if err := action(member.Name, parent); err != nil {
 			writeGitErr(ew, err)
 			return err
 		}

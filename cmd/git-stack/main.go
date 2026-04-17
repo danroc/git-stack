@@ -107,9 +107,9 @@ func cmdView() *cobra.Command {
 // by the engine so this is a pure structural conversion.
 func buildDisplayTree(node *discovery.TreeNode, current string) *ui.TreeEntry {
 	entry := &ui.TreeEntry{
-		BranchName: node.Branch.BranchName,
+		BranchName: node.Branch.Name,
 		AheadCount: node.CommitsAhead,
-		IsCurrent:  node.Branch.BranchName == current,
+		IsCurrent:  node.Branch.Name == current,
 	}
 	for _, child := range node.Children {
 		entry.Children = append(entry.Children, buildDisplayTree(child, current))
