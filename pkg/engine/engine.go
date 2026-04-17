@@ -23,6 +23,7 @@ type DisambiguateFn func(action string, choices []string) (string, error)
 // DiscoveryEngine identifies stack lineage using a commit graph loaded once from git
 // and then queried in-process.
 type DiscoveryEngine struct {
+	git        *gitutils.Git
 	baseBranch string
 	graph      *gitutils.Graph
 }
@@ -36,7 +37,7 @@ func NewDiscoveryEngine(
 	if err != nil {
 		return nil, fmt.Errorf("loading commit graph: %w", err)
 	}
-	return &DiscoveryEngine{baseBranch: baseBranch, graph: graph}, nil
+	return &DiscoveryEngine{git: git, baseBranch: baseBranch, graph: graph}, nil
 }
 
 // BaseBranch returns the base branch that anchors the bottom of every stack.
@@ -110,14 +111,29 @@ func (e *DiscoveryEngine) DiscoverStack(
 		for i := len(chain) - 1; i >= 0; i-- {
 			ancestors = append(ancestors, chain[i])
 		}
-		// Ensure currentBranch is the last element (handles the case where its HEAD is
-		// below the graph boundary, i.e. no commits above base).
+
+		// Config fallback: if graph walk didn't reach currentBranch, follow
+		// stackParent config upward to fill in diverged branches.
 		last := ancestors[len(ancestors)-1].BranchName
 		if last != currentBranch {
-			ancestors = append(ancestors, StackMember{
-				BranchName: currentBranch,
-				CommitHash: currentHead,
-			})
+			var configChain []StackMember
+			b := currentBranch
+			for b != last && b != e.baseBranch && b != "" {
+				bHead, _ := e.graph.HeadOf(b)
+				configChain = append(configChain, StackMember{
+					BranchName: b,
+					CommitHash: bHead,
+				})
+				parent, ok := e.git.GetStackParent(b)
+				if !ok {
+					break
+				}
+				b = parent
+			}
+			// Reverse to get base-to-tip order and append.
+			for i := len(configChain) - 1; i >= 0; i-- {
+				ancestors = append(ancestors, configChain[i])
+			}
 		}
 	}
 
@@ -181,13 +197,13 @@ func (e *DiscoveryEngine) buildChildren(node *TreeNode) {
 	}
 }
 
-// directChildren returns branches whose HEAD is above parent and that have no other
-// such branch sitting between them and parent.
+// directChildren returns branches above parent, with no intermediate branch between
+// them. Also checks git config for diverged branches and persists discoveries.
 func (e *DiscoveryEngine) directChildren(parent string) []string {
 	parentHead, _ := e.graph.HeadOf(parent)
 
-	// Collect all branches above parent.
-	var above []string
+	// Collect all branches above parent via graph ancestry.
+	aboveSet := make(map[string]bool)
 	for _, branch := range e.graph.Branches() {
 		if branch == parent || branch == e.baseBranch {
 			continue
@@ -198,13 +214,35 @@ func (e *DiscoveryEngine) directChildren(parent string) []string {
 		}
 		if parent == e.baseBranch {
 			if e.graph.Contains(head) {
-				above = append(above, branch)
+				// Skip branches that have a non-base config parent —
+				// they belong under that parent, not directly under base.
+				if cp, ok := e.git.GetStackParent(branch); ok && cp != e.baseBranch {
+					continue
+				}
+				aboveSet[branch] = true
 			}
 		} else {
-			if e.graph.IsAncestor(parentHead, head) {
-				above = append(above, branch)
+			if head != parentHead && e.graph.IsAncestor(parentHead, head) {
+				aboveSet[branch] = true
 			}
 		}
+	}
+
+	// Config fallback: add branches whose stackParent is parent but
+	// weren't found via graph ancestry (diverged branches).
+	for _, branch := range e.graph.Branches() {
+		if aboveSet[branch] || branch == parent || branch == e.baseBranch {
+			continue
+		}
+		configParent, ok := e.git.GetStackParent(branch)
+		if ok && configParent == parent {
+			aboveSet[branch] = true
+		}
+	}
+
+	above := make([]string, 0, len(aboveSet))
+	for branch := range aboveSet {
+		above = append(above, branch)
 	}
 
 	// Filter to only direct children (no intermediate branch between parent and child).
@@ -226,5 +264,13 @@ func (e *DiscoveryEngine) directChildren(parent string) []string {
 			direct = append(direct, c)
 		}
 	}
+
+	// Persist discovered relationships, but don't overwrite existing config.
+	for _, child := range direct {
+		if _, ok := e.git.GetStackParent(child); !ok {
+			_ = e.git.SetStackParent(child, parent)
+		}
+	}
+
 	return direct
 }

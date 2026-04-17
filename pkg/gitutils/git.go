@@ -94,6 +94,21 @@ func (g *Git) CreateBranch(name string) error {
 	return err
 }
 
+// SetStackParent records parent as the stack parent of branch in local git config.
+func (g *Git) SetStackParent(branch, parent string) error {
+	_, err := g.run("config", "--local", "branch."+branch+".stackParent", parent)
+	return err
+}
+
+// GetStackParent returns the configured stack parent, or ("", false) if unset.
+func (g *Git) GetStackParent(branch string) (string, bool) {
+	out, err := g.run("config", "--get", "branch."+branch+".stackParent")
+	if err != nil {
+		return "", false
+	}
+	return out, true
+}
+
 // getUpstream returns the remote and remote-tracking branch for a local branch. Returns
 // ("", "", nil) if no upstream is configured.
 func (g *Git) getUpstream(branch string) (string, string, error) {

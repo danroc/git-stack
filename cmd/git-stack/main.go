@@ -66,7 +66,15 @@ func cmdAdd() *cobra.Command {
 		Short: "Create a new branch from the current HEAD, extending the stack",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return gitutils.NewGit(".").CreateBranch(args[0])
+			git := gitutils.NewGit(".")
+			current, err := git.CurrentBranch()
+			if err != nil {
+				return err
+			}
+			if err := git.CreateBranch(args[0]); err != nil {
+				return err
+			}
+			return git.SetStackParent(args[0], current)
 		},
 	}
 }
