@@ -3,7 +3,7 @@ package stack
 import (
 	"testing"
 
-	"git-stack/pkg/gitutils"
+	"git-stack/pkg/git"
 )
 
 func TestParseWorktreeList(t *testing.T) {
@@ -68,7 +68,7 @@ func TestParseWorktreeList(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := gitutils.ParseWorktreeList(tt.input)
+			got := git.ParseWorktreeList(tt.input)
 			if len(got) != len(tt.expect) {
 				t.Fatalf("got %d entries, want %d: %v", len(got), len(tt.expect), got)
 			}
@@ -81,45 +81,45 @@ func TestParseWorktreeList(t *testing.T) {
 	}
 }
 
-// fakeGitOps records method calls for verification.
-type fakeGitOps struct {
+// fakeRepository records method calls for verification.
+type fakeRepository struct {
 	currentBranch string
 	calls         []string
 }
 
-func (f *fakeGitOps) CurrentBranch() (string, error) {
+func (f *fakeRepository) CurrentBranch() (string, error) {
 	f.calls = append(f.calls, "CurrentBranch")
 	return f.currentBranch, nil
 }
 
-func (f *fakeGitOps) Checkout(branch string) error {
+func (f *fakeRepository) Checkout(branch string) error {
 	f.calls = append(f.calls, "Checkout:"+branch)
 	return nil
 }
 
-func (f *fakeGitOps) Push(branch string) error {
+func (f *fakeRepository) Push(branch string) error {
 	f.calls = append(f.calls, "Push:"+branch)
 	return nil
 }
 
-func (f *fakeGitOps) Pull() error {
+func (f *fakeRepository) Pull() error {
 	f.calls = append(f.calls, "Pull")
 	return nil
 }
 
-func (f *fakeGitOps) Rebase(onto string) error {
+func (f *fakeRepository) Rebase(onto string) error {
 	f.calls = append(f.calls, "Rebase:"+onto)
 	return nil
 }
 
 func TestWorktreeGitOps_CheckoutDelegatesToRemote(t *testing.T) {
-	primary := &fakeGitOps{currentBranch: "main"}
-	remote := &fakeGitOps{}
+	primary := &fakeRepository{currentBranch: "main"}
+	remote := &fakeRepository{}
 
 	w := newWorktreeGitOps(primary, map[string]string{
 		"main":   "/repo",
 		"feat-1": "/repo-feat",
-	}, "/repo", func(dir string) GitOps {
+	}, "/repo", func(dir string) Repository {
 		if dir != "/repo-feat" {
 			t.Fatalf("unexpected dir %q", dir)
 		}
@@ -152,11 +152,11 @@ func TestWorktreeGitOps_CheckoutDelegatesToRemote(t *testing.T) {
 }
 
 func TestWorktreeGitOps_CheckoutLocalBranch(t *testing.T) {
-	primary := &fakeGitOps{currentBranch: "main"}
+	primary := &fakeRepository{currentBranch: "main"}
 
 	w := newWorktreeGitOps(primary, map[string]string{
 		"main": "/repo",
-	}, "/repo", func(_ string) GitOps {
+	}, "/repo", func(_ string) Repository {
 		t.Fatal("should not create remote git for local branch")
 		return nil
 	})
@@ -179,13 +179,13 @@ func TestWorktreeGitOps_CheckoutLocalBranch(t *testing.T) {
 }
 
 func TestWorktreeGitOps_PushAlwaysPrimary(t *testing.T) {
-	primary := &fakeGitOps{currentBranch: "main"}
-	remote := &fakeGitOps{}
+	primary := &fakeRepository{currentBranch: "main"}
+	remote := &fakeRepository{}
 
 	w := newWorktreeGitOps(primary, map[string]string{
 		"main":   "/repo",
 		"feat-1": "/repo-feat",
-	}, "/repo", func(_ string) GitOps {
+	}, "/repo", func(_ string) Repository {
 		return remote
 	})
 
@@ -206,12 +206,12 @@ func TestWorktreeGitOps_PushAlwaysPrimary(t *testing.T) {
 }
 
 func TestWorktreeGitOps_CurrentBranchAlwaysPrimary(t *testing.T) {
-	primary := &fakeGitOps{currentBranch: "main"}
+	primary := &fakeRepository{currentBranch: "main"}
 
 	w := newWorktreeGitOps(primary, map[string]string{
 		"feat-1": "/repo-feat",
-	}, "/repo", func(_ string) GitOps {
-		return &fakeGitOps{currentBranch: "feat-1"}
+	}, "/repo", func(_ string) Repository {
+		return &fakeRepository{currentBranch: "feat-1"}
 	})
 
 	_ = w.Checkout("feat-1")
@@ -225,11 +225,11 @@ func TestWorktreeGitOps_CurrentBranchAlwaysPrimary(t *testing.T) {
 }
 
 func TestWorktreeGitOps_CheckoutSameWorktree(t *testing.T) {
-	primary := &fakeGitOps{currentBranch: "main"}
+	primary := &fakeRepository{currentBranch: "main"}
 
 	w := newWorktreeGitOps(primary, map[string]string{
 		"main": "/repo",
-	}, "/repo", func(_ string) GitOps {
+	}, "/repo", func(_ string) Repository {
 		t.Fatal("should not create remote git for same worktree")
 		return nil
 	})

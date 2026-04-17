@@ -7,14 +7,14 @@ import (
 	"io"
 	"path/filepath"
 
-	"git-stack/pkg/engine"
-	"git-stack/pkg/gitutils"
+	"git-stack/pkg/discovery"
+	"git-stack/pkg/git"
 	"git-stack/pkg/ui"
 )
 
-// GitOps abstracts the git operations that stack commands need. Satisfied by
-// *gitutils.Git in production and by fakes in tests.
-type GitOps interface {
+// Repository abstracts the git operations that stack commands need. Satisfied by
+// *git.Client in production and by fakes in tests.
+type Repository interface {
 	CurrentBranch() (string, error)
 	Checkout(branch string) error
 	Push(branch string) error
@@ -24,9 +24,9 @@ type GitOps interface {
 
 // Stack orchestrates push/pull/rebase across every branch in a discovered stack.
 type Stack struct {
-	git          GitOps
-	disc         *engine.DiscoveryEngine
-	disambiguate engine.DisambiguateFn
+	git          Repository
+	disc         *discovery.Engine
+	chooseBranch discovery.ChooseBranchFn
 }
 
 // writer wraps an io.Writer and absorbs write errors after the first failure.
@@ -44,30 +44,28 @@ func (ew *writer) printf(format string, args ...any) {
 // New constructs a Stack using the provided Git adapter and base branch,
 // wiring the interactive disambiguation prompt. If other worktrees are
 // detected, git operations are wrapped to handle branches checked out there.
-func New(git *gitutils.Git, base string) (*Stack, error) {
-	var ops GitOps = git
-	if wts, err := git.WorktreeList(); err == nil && len(wts) > 1 {
+func New(g *git.Client, base string) (*Stack, error) {
+	var ops Repository = g
+	if wts, err := g.WorktreeList(); err == nil && len(wts) > 1 {
 		cwd, _ := filepath.Abs(".")
-		ops = newWorktreeGitOps(git, wts, cwd, func(dir string) GitOps {
-			return gitutils.NewGit(dir)
+		ops = newWorktreeGitOps(g, wts, cwd, func(dir string) Repository {
+			return git.NewClient(dir)
 		})
 	}
-	disc, err := engine.NewDiscoveryEngine(git, base)
+	disc, err := discovery.NewEngine(g, base)
 	if err != nil {
 		return nil, err
 	}
 	return &Stack{
 		git:          ops,
 		disc:         disc,
-		disambiguate: ui.Disambiguate,
+		chooseBranch: ui.Disambiguate,
 	}, nil
 }
 
-// Push pushes every non-base branch in the stack, bottom-to-top.
-// Halts on the first failure and reports the failing branch.
-// writeGitErr prints the stderr from a GitError to w with surrounding blank lines.
+// writeGitErr prints the stderr from a git.Error to w with surrounding blank lines.
 func writeGitErr(w *writer, err error) {
-	var gitErr *gitutils.GitError
+	var gitErr *git.Error
 	if errors.As(err, &gitErr) && gitErr.Stderr != "" {
 		w.printf("\n\n%s\n\n", gitErr.Stderr)
 	} else {
@@ -92,7 +90,7 @@ func (s *Stack) forEachBranch(
 		return err
 	}
 
-	members, err := s.disc.DiscoverStack(current, s.disambiguate)
+	members, err := s.disc.DiscoverStack(current, s.chooseBranch)
 	if err != nil {
 		return err
 	}

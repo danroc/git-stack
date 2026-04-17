@@ -4,8 +4,8 @@ package main
 import (
 	"os"
 
-	"git-stack/pkg/engine"
-	"git-stack/pkg/gitutils"
+	"git-stack/pkg/discovery"
+	"git-stack/pkg/git"
 	"git-stack/pkg/stack"
 	"git-stack/pkg/ui"
 
@@ -30,29 +30,29 @@ func main() {
 	}
 }
 
-// resolveBase returns a Git adapter and the base branch name (from --base flag or
+// resolveBase returns a Git client and the base branch name (from --base flag or
 // auto-detection).
-func resolveBase() (*gitutils.Git, string, error) {
-	git := gitutils.NewGit(".")
+func resolveBase() (*git.Client, string, error) {
+	g := git.NewClient(".")
 	base := baseBranch
 	if base == "" {
 		var err error
-		base, err = engine.DetectBaseBranch(git)
+		base, err = discovery.DetectBase(g)
 		if err != nil {
 			return nil, "", err
 		}
 	}
-	return git, base, nil
+	return g, base, nil
 }
 
 // runStackCmd is a RunE handler that resolves the base, builds a Stack, and calls fn.
 func runStackCmd(fn func(*stack.Stack) error) func(*cobra.Command, []string) error {
 	return func(_ *cobra.Command, _ []string) error {
-		git, base, err := resolveBase()
+		g, base, err := resolveBase()
 		if err != nil {
 			return err
 		}
-		s, err := stack.New(git, base)
+		s, err := stack.New(g, base)
 		if err != nil {
 			return err
 		}
@@ -66,15 +66,15 @@ func cmdAdd() *cobra.Command {
 		Short: "Create a new branch from the current HEAD, extending the stack",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			git := gitutils.NewGit(".")
-			current, err := git.CurrentBranch()
+			g := git.NewClient(".")
+			current, err := g.CurrentBranch()
 			if err != nil {
 				return err
 			}
-			if err := git.CreateBranch(args[0]); err != nil {
+			if err := g.CreateBranch(args[0]); err != nil {
 				return err
 			}
-			return git.SetStackParent(args[0], current)
+			return g.SetStackParent(args[0], current)
 		},
 	}
 }
@@ -84,15 +84,15 @@ func cmdView() *cobra.Command {
 		Use:   "view",
 		Short: "Show the full stack tree",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			git, base, err := resolveBase()
+			g, base, err := resolveBase()
 			if err != nil {
 				return err
 			}
-			disc, err := engine.NewDiscoveryEngine(git, base)
+			disc, err := discovery.NewEngine(g, base)
 			if err != nil {
 				return err
 			}
-			current, err := git.CurrentBranch()
+			current, err := g.CurrentBranch()
 			if err != nil {
 				return err
 			}
@@ -103,13 +103,13 @@ func cmdView() *cobra.Command {
 	}
 }
 
-// buildDisplayTree maps engine nodes to ui nodes. CommitsAhead is already computed by
+// buildDisplayTree maps discovery nodes to ui nodes. CommitsAhead is already computed by
 // the engine so this is a pure structural conversion.
-func buildDisplayTree(node *engine.TreeNode, current string) *ui.TreeEntry {
+func buildDisplayTree(node *discovery.TreeNode, current string) *ui.TreeEntry {
 	entry := &ui.TreeEntry{
-		BranchName: node.Member.BranchName,
+		BranchName: node.Branch.BranchName,
 		AheadCount: node.CommitsAhead,
-		IsCurrent:  node.Member.BranchName == current,
+		IsCurrent:  node.Branch.BranchName == current,
 	}
 	for _, child := range node.Children {
 		entry.Children = append(entry.Children, buildDisplayTree(child, current))

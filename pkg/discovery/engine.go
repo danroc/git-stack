@@ -1,56 +1,56 @@
-// Package engine implements stack discovery using Git primitives.
-package engine
+// Package discovery implements stack discovery using Git primitives.
+package discovery
 
 import (
 	"fmt"
 
-	"git-stack/pkg/gitutils"
+	"git-stack/pkg/git"
 )
 
-// StackMember is a branch name paired with its HEAD hash.
-type StackMember struct {
+// Branch is a branch name paired with its HEAD hash.
+type Branch struct {
 	BranchName string
 	CommitHash string
 }
 
-// DisambiguateFn is called when multiple direct-child branches are found at a
+// ChooseBranchFn is called when multiple direct-child branches are found at a
 // bifurcation point.
 //
 // It receives the action being performed and the candidate branch names, and returns
 // the chosen branch name.
-type DisambiguateFn func(action string, choices []string) (string, error)
+type ChooseBranchFn func(action string, choices []string) (string, error)
 
-// DiscoveryEngine identifies stack lineage using a commit graph loaded once from git
+// Engine identifies stack lineage using a commit graph loaded once from git
 // and then queried in-process.
-type DiscoveryEngine struct {
-	git        *gitutils.Git
+type Engine struct {
+	git        *git.Client
 	baseBranch string
-	graph      *gitutils.Graph
+	graph      *git.Graph
 }
 
-// NewDiscoveryEngine creates an engine that discovers stacks relative to baseBranch.
-func NewDiscoveryEngine(
-	git *gitutils.Git,
+// NewEngine creates an engine that discovers stacks relative to baseBranch.
+func NewEngine(
+	g *git.Client,
 	baseBranch string,
-) (*DiscoveryEngine, error) {
-	graph, err := git.LoadGraph(baseBranch)
+) (*Engine, error) {
+	graph, err := g.LoadGraph(baseBranch)
 	if err != nil {
 		return nil, fmt.Errorf("loading commit graph: %w", err)
 	}
-	return &DiscoveryEngine{git: git, baseBranch: baseBranch, graph: graph}, nil
+	return &Engine{git: g, baseBranch: baseBranch, graph: graph}, nil
 }
 
 // BaseBranch returns the base branch that anchors the bottom of every stack.
-func (e *DiscoveryEngine) BaseBranch() string {
+func (e *Engine) BaseBranch() string {
 	return e.baseBranch
 }
 
-// DetectBaseBranch returns the base branch by checking for well-known defaults.
+// DetectBase returns the base branch by checking for well-known defaults.
 //
 // It looks for "main" then "master" among local branches. If neither exists, it returns
 // an error asking the user to specify --base explicitly.
-func DetectBaseBranch(git *gitutils.Git) (string, error) {
-	branches, err := git.ListBranches()
+func DetectBase(g *git.Client) (string, error) {
+	branches, err := g.ListBranches()
 	if err != nil {
 		return "", err
 	}
@@ -66,7 +66,7 @@ func DetectBaseBranch(git *gitutils.Git) (string, error) {
 
 // TreeNode is a node in the full branch tree built by BuildTree.
 type TreeNode struct {
-	Member       StackMember
+	Branch       Branch
 	CommitsAhead int
 	Children     []*TreeNode
 }
@@ -75,12 +75,12 @@ type TreeNode struct {
 //
 // The upward trace (base → currentBranch) walks the first-parent chain in the commit
 // graph, collecting commits that are branch heads. The downward trace (branches above
-// currentBranch) uses graph ancestry queries. disambiguate is called if a bifurcation
+// currentBranch) uses graph ancestry queries. chooseBranch is called if a bifurcation
 // is found.
-func (e *DiscoveryEngine) DiscoverStack(
+func (e *Engine) DiscoverStack(
 	currentBranch string,
-	disambiguate DisambiguateFn,
-) ([]StackMember, error) {
+	chooseBranch ChooseBranchFn,
+) ([]Branch, error) {
 	currentHead, ok := e.graph.HeadOf(currentBranch)
 	if !ok {
 		return nil, fmt.Errorf("branch %q not found in graph", currentBranch)
@@ -94,13 +94,13 @@ func (e *DiscoveryEngine) DiscoverStack(
 	// --- Upward trace: walk first-parent from currentHead toward base ---
 
 	// Collect branch-head commits newest-to-oldest, then reverse.
-	ancestors := []StackMember{{BranchName: e.baseBranch, CommitHash: baseHead}}
+	ancestors := []Branch{{BranchName: e.baseBranch, CommitHash: baseHead}}
 	if currentBranch != e.baseBranch {
-		var chain []StackMember
+		var chain []Branch
 		h := currentHead
 		for e.graph.Contains(h) {
 			if branch, ok := e.graph.BranchAt(h); ok {
-				chain = append(chain, StackMember{BranchName: branch, CommitHash: h})
+				chain = append(chain, Branch{BranchName: branch, CommitHash: h})
 			}
 			p, ok := e.graph.FirstParent(h)
 			if !ok {
@@ -116,11 +116,11 @@ func (e *DiscoveryEngine) DiscoverStack(
 		// stackParent config upward to fill in diverged branches.
 		last := ancestors[len(ancestors)-1].BranchName
 		if last != currentBranch {
-			var configChain []StackMember
+			var configChain []Branch
 			b := currentBranch
 			for b != last && b != e.baseBranch && b != "" {
 				bHead, _ := e.graph.HeadOf(b)
-				configChain = append(configChain, StackMember{
+				configChain = append(configChain, Branch{
 					BranchName: b,
 					CommitHash: bHead,
 				})
@@ -138,7 +138,7 @@ func (e *DiscoveryEngine) DiscoverStack(
 	}
 
 	// --- Downward trace: branches built on top of currentBranch ---
-	descendants, err := e.traceDescendants(currentBranch, disambiguate)
+	descendants, err := e.traceDescendants(currentBranch, chooseBranch)
 	if err != nil {
 		return nil, err
 	}
@@ -146,11 +146,11 @@ func (e *DiscoveryEngine) DiscoverStack(
 	return append(ancestors, descendants...), nil
 }
 
-func (e *DiscoveryEngine) traceDescendants(
+func (e *Engine) traceDescendants(
 	branch string,
-	disambiguate DisambiguateFn,
-) ([]StackMember, error) {
-	var result []StackMember
+	chooseBranch ChooseBranchFn,
+) ([]Branch, error) {
+	var result []Branch
 	for {
 		children := e.directChildren(branch)
 		if len(children) == 0 {
@@ -162,35 +162,35 @@ func (e *DiscoveryEngine) traceDescendants(
 			chosen = children[0]
 		} else {
 			var err error
-			chosen, err = disambiguate("traverse", children)
+			chosen, err = chooseBranch("traverse", children)
 			if err != nil {
 				return nil, err
 			}
 		}
 
 		chosenHash, _ := e.graph.HeadOf(chosen)
-		result = append(result, StackMember{BranchName: chosen, CommitHash: chosenHash})
+		result = append(result, Branch{BranchName: chosen, CommitHash: chosenHash})
 		branch = chosen
 	}
 }
 
 // BuildTree constructs the full branch tree rooted at the base branch. Unlike
 // DiscoverStack, it never prompts, all descendants are included.
-func (e *DiscoveryEngine) BuildTree() *TreeNode {
+func (e *Engine) BuildTree() *TreeNode {
 	baseHead, _ := e.graph.HeadOf(e.baseBranch)
 	root := &TreeNode{
-		Member: StackMember{BranchName: e.baseBranch, CommitHash: baseHead},
+		Branch: Branch{BranchName: e.baseBranch, CommitHash: baseHead},
 	}
 	e.buildChildren(root)
 	return root
 }
 
-func (e *DiscoveryEngine) buildChildren(node *TreeNode) {
-	for _, child := range e.directChildren(node.Member.BranchName) {
+func (e *Engine) buildChildren(node *TreeNode) {
+	for _, child := range e.directChildren(node.Branch.BranchName) {
 		childHash, _ := e.graph.HeadOf(child)
 		childNode := &TreeNode{
-			Member:       StackMember{BranchName: child, CommitHash: childHash},
-			CommitsAhead: e.graph.CommitsAhead(node.Member.CommitHash, childHash),
+			Branch:       Branch{BranchName: child, CommitHash: childHash},
+			CommitsAhead: e.graph.CommitsAhead(node.Branch.CommitHash, childHash),
 		}
 		node.Children = append(node.Children, childNode)
 		e.buildChildren(childNode)
@@ -199,7 +199,7 @@ func (e *DiscoveryEngine) buildChildren(node *TreeNode) {
 
 // directChildren returns branches above parent, with no intermediate branch between
 // them. Also checks git config for diverged branches and persists discoveries.
-func (e *DiscoveryEngine) directChildren(parent string) []string {
+func (e *Engine) directChildren(parent string) []string {
 	parentHead, _ := e.graph.HeadOf(parent)
 
 	// Collect all branches above parent via graph ancestry.

@@ -91,7 +91,7 @@ func (p palette) formatEntry(e *TreeEntry) string {
 }
 
 // Disambiguate prompts the user to choose from multiple candidate branches
-// when a bifurcation is detected. It satisfies engine.DisambiguateFn.
+// when a bifurcation is detected. It satisfies discovery.ChooseBranchFn.
 func Disambiguate(action string, choices []string) (string, error) {
 	fmt.Printf("Multiple branches detected. Which branch do you want to %s?\n", action)
 	for i, c := range choices {

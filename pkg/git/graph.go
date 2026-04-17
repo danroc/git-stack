@@ -1,4 +1,4 @@
-package gitutils
+package git
 
 import (
 	"bufio"
@@ -21,7 +21,7 @@ type Graph struct {
 //
 // 1. git for-each-ref to collect all branch heads.
 // 2. git log to load the commit DAG between those heads and baseBranch.
-func (g *Git) LoadGraph(baseBranch string) (*Graph, error) {
+func (g *Client) LoadGraph(baseBranch string) (*Graph, error) {
 	heads, err := g.listBranchHeads()
 	if err != nil {
 		return nil, err
@@ -29,7 +29,7 @@ func (g *Git) LoadGraph(baseBranch string) (*Graph, error) {
 	return g.buildGraph(baseBranch, heads)
 }
 
-func (g *Git) listBranchHeads() (map[string]string, error) {
+func (g *Client) listBranchHeads() (map[string]string, error) {
 	out, err := g.run(
 		"for-each-ref",
 		"--format=%(refname:short) %(objectname)",
@@ -52,7 +52,7 @@ func (g *Git) listBranchHeads() (map[string]string, error) {
 	return heads, nil
 }
 
-func (g *Git) buildGraph(baseBranch string, heads map[string]string) (*Graph, error) {
+func (g *Client) buildGraph(baseBranch string, heads map[string]string) (*Graph, error) {
 	graph := &Graph{
 		parents:  make(map[string][]string),
 		heads:    heads,

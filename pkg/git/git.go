@@ -1,6 +1,6 @@
-// Package gitutils wraps git subprocesses so the rest of the codebase never touches
+// Package git wraps git subprocesses so the rest of the codebase never touches
 // os/exec directly. Every instance is scoped to a directory via cmd.Dir.
-package gitutils
+package git
 
 import (
 	"bufio"
@@ -11,30 +11,30 @@ import (
 	"strings"
 )
 
-// Git executes git commands in a fixed working directory.
-type Git struct {
+// Client executes git commands in a fixed working directory.
+type Client struct {
 	dir string
 }
 
-// NewGit returns a Git instance that runs all commands with cmd.Dir set to dir.
-func NewGit(dir string) *Git {
-	return &Git{dir: dir}
+// NewClient returns a Client that runs all commands with cmd.Dir set to dir.
+func NewClient(dir string) *Client {
+	return &Client{dir: dir}
 }
 
-// GitError is returned when a git subprocess exits with a non-zero status.
-type GitError struct {
+// Error is returned when a git subprocess exits with a non-zero status.
+type Error struct {
 	Args   []string
 	Stderr string
 	Err    error
 }
 
-func (e *GitError) Error() string {
+func (e *Error) Error() string {
 	return fmt.Sprintf("git %s: %s", strings.Join(e.Args, " "), e.Err)
 }
 
-func (e *GitError) Unwrap() error { return e.Err }
+func (e *Error) Unwrap() error { return e.Err }
 
-func (g *Git) run(args ...string) (string, error) {
+func (g *Client) run(args ...string) (string, error) {
 	var (
 		stdout bytes.Buffer
 		stderr bytes.Buffer
@@ -47,7 +47,7 @@ func (g *Git) run(args ...string) (string, error) {
 
 	err := cmd.Run()
 	if err != nil {
-		return "", &GitError{
+		return "", &Error{
 			Args:   args,
 			Stderr: strings.TrimSpace(stderr.String()),
 			Err:    err,
@@ -63,12 +63,12 @@ func isExitCode(err error, code int) bool {
 }
 
 // CurrentBranch returns the short name of HEAD (e.g. "main"), or "HEAD" if detached.
-func (g *Git) CurrentBranch() (string, error) {
+func (g *Client) CurrentBranch() (string, error) {
 	return g.run("rev-parse", "--abbrev-ref", "HEAD")
 }
 
 // ListBranches returns all local branch names (refs/heads/*).
-func (g *Git) ListBranches() ([]string, error) {
+func (g *Client) ListBranches() ([]string, error) {
 	out, err := g.run("for-each-ref", "--format=%(refname:short)", "refs/heads/")
 	if err != nil {
 		return nil, err
@@ -83,25 +83,25 @@ func (g *Git) ListBranches() ([]string, error) {
 //
 // Will fail if the branch is checked out in another worktree, see worktreeGitOps for
 // that case.
-func (g *Git) Checkout(branch string) error {
+func (g *Client) Checkout(branch string) error {
 	_, err := g.run("checkout", branch)
 	return err
 }
 
 // CreateBranch creates a new branch at HEAD and switches to it.
-func (g *Git) CreateBranch(name string) error {
+func (g *Client) CreateBranch(name string) error {
 	_, err := g.run("checkout", "-b", name)
 	return err
 }
 
 // SetStackParent records parent as the stack parent of branch in local git config.
-func (g *Git) SetStackParent(branch, parent string) error {
+func (g *Client) SetStackParent(branch, parent string) error {
 	_, err := g.run("config", "--local", "branch."+branch+".stackParent", parent)
 	return err
 }
 
 // GetStackParent returns the configured stack parent, or ("", false) if unset.
-func (g *Git) GetStackParent(branch string) (string, bool) {
+func (g *Client) GetStackParent(branch string) (string, bool) {
 	out, err := g.run("config", "--get", "branch."+branch+".stackParent")
 	if err != nil {
 		return "", false
@@ -111,7 +111,7 @@ func (g *Git) GetStackParent(branch string) (string, bool) {
 
 // getUpstream returns the remote and remote-tracking branch for a local branch. Returns
 // ("", "", nil) if no upstream is configured.
-func (g *Git) getUpstream(branch string) (string, string, error) {
+func (g *Client) getUpstream(branch string) (string, string, error) {
 	remote, err := g.run("config", "--get", "branch."+branch+".remote")
 	if err != nil {
 		if isExitCode(err, 1) {
@@ -131,7 +131,7 @@ func (g *Git) getUpstream(branch string) (string, string, error) {
 
 // Push pushes branch to its configured upstream. If no upstream is configured, pushes
 // to origin/<branch> and sets it as the upstream.
-func (g *Git) Push(branch string) error {
+func (g *Client) Push(branch string) error {
 	remote, remoteBranch, err := g.getUpstream(branch)
 	if err != nil {
 		return err
@@ -145,20 +145,20 @@ func (g *Git) Push(branch string) error {
 }
 
 // Pull runs `git pull --rebase` on the currently checked-out branch.
-func (g *Git) Pull() error {
+func (g *Client) Pull() error {
 	_, err := g.run("pull", "--rebase")
 	return err
 }
 
 // Rebase rebases the current branch onto the given target.
-func (g *Git) Rebase(onto string) error {
+func (g *Client) Rebase(onto string) error {
 	_, err := g.run("rebase", onto)
 	return err
 }
 
 // WorktreeList returns branch → absolute worktree path for every worktree that has a
 // branch checked out.
-func (g *Git) WorktreeList() (map[string]string, error) {
+func (g *Client) WorktreeList() (map[string]string, error) {
 	out, err := g.run("worktree", "list", "--porcelain")
 	if err != nil {
 		return nil, err
@@ -195,7 +195,7 @@ func ParseWorktreeList(output string) map[string]string {
 }
 
 // CommitsAhead returns the number of commits reachable from branch but not from parent.
-func (g *Git) CommitsAhead(parent, branch string) (int, error) {
+func (g *Client) CommitsAhead(parent, branch string) (int, error) {
 	out, err := g.run("rev-list", "--count", parent+".."+branch)
 	if err != nil {
 		return 0, err
