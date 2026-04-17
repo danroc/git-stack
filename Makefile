@@ -7,8 +7,9 @@ PROJECT_NAME := git-stack
 DESCRIPTION  := Manage stacks of interdependent Git branches
 
 # Directories
-ROOT_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
-DIST_DIR := $(ROOT_DIR)/dist
+ROOT_DIR    := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+DIST_DIR    := $(ROOT_DIR)/dist
+INSTALL_DIR := $(HOME)/.local/bin
 
 # Version components from git
 COMMIT  := $(shell git describe --always --dirty --exclude='*')
@@ -82,6 +83,11 @@ run: ## Run the main program
 .PHONY: build
 build: $(DIST_DIR) ## Build the binary
 	go build -ldflags="$(LDFLAGS)" -o $(DIST_DIR)/git-stack ./cmd/git-stack/
+
+.PHONY: install
+install: build ## Install the binary to $HOME/.local/bin
+	mkdir -p $(INSTALL_DIR)
+	cp $(DIST_DIR)/git-stack $(INSTALL_DIR)/git-stack
 
 .PHONY: clean
 clean: ## Clean the dist directory
