@@ -249,6 +249,7 @@ func (e *Engine) directChildren(parent string) []string {
 	for branch := range aboveSet {
 		above = append(above, branch)
 	}
+	slices.Sort(above)
 
 	// Filter to only direct children (no intermediate branch between parent and child).
 	var direct []string
