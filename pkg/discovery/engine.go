@@ -214,14 +214,14 @@ func (e *Engine) directChildren(parent string) []string {
 		if !ok {
 			continue
 		}
+
 		if parent == e.baseBranch {
 			if e.graph.Contains(head) {
 				// Skip branches that have a non-base config parent; they are stacked
 				// above that parent, not directly above base.
 				if configParent, ok := e.git.GetStackParent(
 					branch,
-				); ok &&
-					configParent != e.baseBranch {
+				); ok && configParent != e.baseBranch {
 					continue
 				}
 				aboveSet[branch] = true
