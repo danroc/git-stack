@@ -217,8 +217,11 @@ func (e *Engine) directChildren(parent string) []string {
 
 		if parent == e.baseBranch {
 			// The base head is not in the graph, so IsAncestor can't be used. Any
-			// branch whose head is in the graph is above the base by definition. The
-			// config-parent check prunes branches already claimed by another parent.
+			// branch whose head is in the graph is above the base by definition.
+			//
+			// Branches with a non-base configured parent are skipped: without this, two
+			// branches at the same HEAD would mutually exclude each other in the
+			// directness filter (IsAncestor returns true for equal commits).
 			if e.graph.Contains(head) {
 				if configParent, ok := e.git.GetStackParent(
 					branch,
