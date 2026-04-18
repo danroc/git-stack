@@ -198,8 +198,8 @@ func (e *Engine) buildChildren(node *TreeNode) {
 	}
 }
 
-// directChildren returns branches stacked directly on top of parent: one level above it
-// with no intermediate branch between them. Also checks git config for diverged
+// directChildren returns branches stacked directly on top of parent: one level above
+// it with no intermediate branch between them. Also checks git config for diverged
 // branches and persists discoveries.
 func (e *Engine) directChildren(parent string) []string {
 	parentHead, _ := e.graph.HeadOf(parent)
@@ -219,8 +219,8 @@ func (e *Engine) directChildren(parent string) []string {
 			// The base head is not in the graph, so IsAncestor can't be used. Any
 			// branch whose head is in the graph is above the base by definition.
 			//
-			// Branches with a non-base configured parent are skipped: without this, two
-			// branches at the same HEAD would mutually exclude each other in the
+			// Branches with a non-base configured parent are skipped: without this,
+			// two branches at the same HEAD would mutually exclude each other in the
 			// directness filter (IsAncestor returns true for equal commits).
 			if e.graph.Contains(head) {
 				if configParent, ok := e.git.GetStackParent(
