@@ -69,6 +69,8 @@ func (g *Client) buildGraph(
 		graph.branchAt[hash] = branch
 	}
 
+	// This produces commit hashes along with their parent hashes, for all commits
+	// reachable from any branch head but not from baseBranch.
 	hashes := slices.Sorted(maps.Values(heads))
 	args := []string{"log", "--format=%H %P"}
 	args = append(args, hashes...)
