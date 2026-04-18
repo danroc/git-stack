@@ -119,6 +119,7 @@ func (g *Client) getUpstream(branch string) (string, string, error) {
 		}
 		return "", "", err
 	}
+
 	merge, err := g.run("config", "--get", "branch."+branch+".merge")
 	if err != nil {
 		if isExitCode(err, 1) {
@@ -126,6 +127,7 @@ func (g *Client) getUpstream(branch string) (string, string, error) {
 		}
 		return "", "", err
 	}
+
 	return remote, strings.TrimPrefix(merge, "refs/heads/"), nil
 }
 
