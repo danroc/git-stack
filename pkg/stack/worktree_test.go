@@ -112,6 +112,11 @@ func (f *fakeRepository) Rebase(onto string) error {
 	return nil
 }
 
+func (f *fakeRepository) RebaseOnto(newBase, upstream, branch string) error {
+	f.calls = append(f.calls, "RebaseOnto:"+newBase+":"+upstream+":"+branch)
+	return nil
+}
+
 func TestWorktreeGitOps_CheckoutDelegatesToRemote(t *testing.T) {
 	primary := &fakeRepository{currentBranch: "main"}
 	remote := &fakeRepository{}

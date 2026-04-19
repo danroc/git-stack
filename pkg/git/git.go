@@ -158,6 +158,13 @@ func (g *Client) Rebase(onto string) error {
 	return err
 }
 
+// RebaseOnto replays commits reachable from branch but not from upstream onto newBase.
+// Equivalent to: git rebase --onto newBase upstream branch
+func (g *Client) RebaseOnto(newBase, upstream, branch string) error {
+	_, err := g.run("rebase", "--onto", newBase, upstream, branch)
+	return err
+}
+
 // WorktreeList returns branch → absolute worktree path for every worktree that has a
 // branch checked out.
 func (g *Client) WorktreeList() (map[string]string, error) {

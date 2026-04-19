@@ -72,6 +72,12 @@ type TreeNode struct {
 	Children     []*TreeNode
 }
 
+// BranchWithParent is a branch paired with the name of its immediate stack parent.
+type BranchWithParent struct {
+	Branch Branch
+	Parent string
+}
+
 // DiscoverStack identifies the full linear stack that contains currentBranch.
 //
 // Two passes build the result. The first (base → currentBranch) walks the first-parent
@@ -283,4 +289,82 @@ func (e *Engine) directChildren(parent string) []string {
 	}
 
 	return direct
+}
+
+// Parent returns the immediate stack parent of branch. It first checks git config; if
+// unset it falls back to graph ancestry.
+func (e *Engine) Parent(branch string) (string, error) {
+	if parent, ok := e.git.GetStackParent(branch); ok {
+		return parent, nil
+	}
+	ancestors, err := e.traceAncestors(branch)
+	if err != nil {
+		return "", err
+	}
+	if len(ancestors) < 2 {
+		return "", fmt.Errorf("branch %q has no parent in the stack", branch)
+	}
+	return ancestors[len(ancestors)-2].Name, nil
+}
+
+// IsBranchDescendant reports whether descendant is strictly below ancestor in the tree.
+func (e *Engine) IsBranchDescendant(ancestor, descendant string) bool {
+	ancestorHead, ok := e.graph.HeadOf(ancestor)
+	if !ok {
+		return false
+	}
+	descHead, ok := e.graph.HeadOf(descendant)
+	if !ok {
+		return false
+	}
+	if ancestorHead == descHead {
+		return false
+	}
+	// The base branch head is not loaded into the graph (it marks the boundary), so
+	// IsAncestor can't be used. Any branch with a head in the graph is a descendant of
+	// the base by definition.
+	if ancestor == e.baseBranch {
+		return e.graph.Contains(descHead)
+	}
+	return e.graph.IsAncestor(ancestorHead, descHead)
+}
+
+// SubtreeMembers returns all branches in the subtree rooted at branchName (excluding
+// the root itself), each paired with their immediate parent, in pre-order (parents
+// before children).
+func (e *Engine) SubtreeMembers(branchName string) []BranchWithParent {
+	root := e.BuildTree()
+	node := findTreeNode(root, branchName)
+	if node == nil {
+		return nil
+	}
+	var result []BranchWithParent
+	for _, child := range node.Children {
+		collectSubtreeMembers(child, branchName, &result)
+	}
+	return result
+}
+
+// SetParent sets branch's stack parent in git config.
+func (e *Engine) SetParent(branch, parent string) error {
+	return e.git.SetStackParent(branch, parent)
+}
+
+func findTreeNode(root *TreeNode, name string) *TreeNode {
+	if root.Branch.Name == name {
+		return root
+	}
+	for _, child := range root.Children {
+		if found := findTreeNode(child, name); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+func collectSubtreeMembers(node *TreeNode, parent string, result *[]BranchWithParent) {
+	*result = append(*result, BranchWithParent{Branch: node.Branch, Parent: parent})
+	for _, child := range node.Children {
+		collectSubtreeMembers(child, node.Branch.Name, result)
+	}
 }

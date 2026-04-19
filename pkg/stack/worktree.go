@@ -67,3 +67,11 @@ func (w *worktreeGitOps) Rebase(onto string) error {
 	}
 	return err
 }
+
+func (w *worktreeGitOps) RebaseOnto(newBase, upstream, branch string) error {
+	err := w.active.RebaseOnto(newBase, upstream, branch)
+	if err != nil && w.activeDir != "" {
+		return fmt.Errorf("in worktree %s: %w", w.activeDir, err)
+	}
+	return err
+}

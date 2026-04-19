@@ -2,6 +2,9 @@
 package main
 
 import (
+	"errors"
+	"fmt"
+	"io"
 	"os"
 
 	"git-stack/pkg/discovery"
@@ -23,7 +26,15 @@ func main() {
 	root.PersistentFlags().
 		StringVar(&baseBranch, "base", "", "base branch (default: auto-detect)")
 
-	root.AddCommand(cmdAdd(), cmdParent(), cmdView(), cmdPush(), cmdPull(), cmdRebase())
+	root.AddCommand(
+		cmdAdd(),
+		cmdParent(),
+		cmdMove(),
+		cmdView(),
+		cmdPush(),
+		cmdPull(),
+		cmdRebase(),
+	)
 
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
@@ -57,6 +68,39 @@ func runStackCmd(fn func(*stack.Stack) error) func(*cobra.Command, []string) err
 			return err
 		}
 		return fn(s)
+	}
+}
+
+// stepPrinter returns a NotifyFn that writes incremental progress to w. verb is used
+// for rebase-type steps ("Rebasing", "Pulling", "Pushing"). Steps with To set are
+// formatted as move operations.
+func stepPrinter(w io.Writer, verb string) stack.NotifyFn {
+	return func(s stack.Step, done bool) {
+		if done {
+			_, _ = fmt.Fprintln(w, "done")
+			return
+		}
+		switch {
+		case s.To != "":
+			_, _ = fmt.Fprintf(
+				w,
+				"Moving %s from %s to %s... ",
+				s.Branch, s.Parent, s.To,
+			)
+		case s.Parent != "":
+			_, _ = fmt.Fprintf(w, "%s %s onto %s... ", verb, s.Branch, s.Parent)
+		default:
+			_, _ = fmt.Fprintf(w, "%s %s... ", verb, s.Branch)
+		}
+	}
+}
+
+// printGitStderr prints git's stderr to os.Stderr when a git operation fails, so the
+// user sees the same output they'd get from running git directly.
+func printGitStderr(err error) {
+	var gitErr *git.Error
+	if errors.As(err, &gitErr) && gitErr.Stderr != "" {
+		_, _ = fmt.Fprintf(os.Stderr, "\n%s\n\n", gitErr.Stderr)
 	}
 }
 
@@ -125,8 +169,7 @@ func cmdView() *cobra.Command {
 	}
 }
 
-// buildDisplayTree maps discovery nodes to ui nodes. CommitsAhead is already computed
-// by the engine so this is a pure structural conversion.
+// buildDisplayTree converts a discovery tree to a ui tree for rendering.
 func buildDisplayTree(node *discovery.TreeNode, current string) *ui.TreeEntry {
 	entry := &ui.TreeEntry{
 		BranchName: node.Branch.Name,
@@ -143,7 +186,13 @@ func cmdPush() *cobra.Command {
 	return &cobra.Command{
 		Use:   "push",
 		Short: "Push all branches in the stack to their upstreams",
-		RunE:  runStackCmd(func(s *stack.Stack) error { return s.Push(os.Stdout) }),
+		RunE: runStackCmd(func(s *stack.Stack) error {
+			err := s.Push(stepPrinter(os.Stdout, "Pushing"))
+			if err != nil {
+				printGitStderr(err)
+			}
+			return err
+		}),
 	}
 }
 
@@ -151,7 +200,13 @@ func cmdPull() *cobra.Command {
 	return &cobra.Command{
 		Use:   "pull",
 		Short: "Pull all branches in the stack from their upstreams",
-		RunE:  runStackCmd(func(s *stack.Stack) error { return s.Pull(os.Stdout) }),
+		RunE: runStackCmd(func(s *stack.Stack) error {
+			err := s.Pull(stepPrinter(os.Stdout, "Pulling"))
+			if err != nil {
+				printGitStderr(err)
+			}
+			return err
+		}),
 	}
 }
 
@@ -159,6 +214,45 @@ func cmdRebase() *cobra.Command {
 	return &cobra.Command{
 		Use:   "rebase",
 		Short: "Rebase each branch in the stack onto the tip of its parent, bottom-to-top",
-		RunE:  runStackCmd(func(s *stack.Stack) error { return s.Rebase(os.Stdout) }),
+		RunE: runStackCmd(func(s *stack.Stack) error {
+			err := s.Rebase(stepPrinter(os.Stdout, "Rebasing"))
+			if err != nil {
+				printGitStderr(err)
+			}
+			return err
+		}),
+	}
+}
+
+func cmdMove() *cobra.Command {
+	return &cobra.Command{
+		Use:   "move [branch] <new-parent>",
+		Short: "Move a branch to a different parent, rebasing it and its descendants",
+		Args:  cobra.RangeArgs(1, 2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			g, base, err := resolveBase()
+			if err != nil {
+				return err
+			}
+			s, err := stack.New(g, base)
+			if err != nil {
+				return err
+			}
+			var branch, newParent string
+			if len(args) == 1 {
+				branch, err = g.CurrentBranch()
+				if err != nil {
+					return err
+				}
+				newParent = args[0]
+			} else {
+				branch, newParent = args[0], args[1]
+			}
+			err = s.Move(branch, newParent, stepPrinter(os.Stdout, "Rebasing"))
+			if err != nil {
+				printGitStderr(err)
+			}
+			return err
+		},
 	}
 }

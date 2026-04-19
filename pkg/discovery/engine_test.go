@@ -215,3 +215,100 @@ func TestBuildTree_CommitsAhead(t *testing.T) {
 		t.Errorf("feat-2 CommitsAhead = %d, want 1", feat1.Children[0].CommitsAhead)
 	}
 }
+
+func TestParent_FromConfig(t *testing.T) {
+	g := initTestRepo(t)
+	e := newTestEngine(t, linearTestGraph(), "main")
+	if err := g.SetStackParent("feat-2", "feat-1"); err != nil {
+		t.Fatal(err)
+	}
+	e.git = g
+
+	parent, err := e.Parent("feat-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parent != "feat-1" {
+		t.Errorf("got %q, want feat-1", parent)
+	}
+}
+
+func TestParent_FromGraph(t *testing.T) {
+	e := newTestEngine(t, linearTestGraph(), "main")
+	parent, err := e.Parent("feat-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parent != "feat-1" {
+		t.Errorf("got %q, want feat-1", parent)
+	}
+}
+
+func TestIsBranchDescendant(t *testing.T) {
+	e := newTestEngine(t, linearTestGraph(), "main")
+
+	if !e.IsBranchDescendant("main", "feat-1") {
+		t.Error("feat-1 should be a descendant of main")
+	}
+	if !e.IsBranchDescendant("feat-1", "feat-2") {
+		t.Error("feat-2 should be a descendant of feat-1")
+	}
+	if e.IsBranchDescendant("feat-2", "main") {
+		t.Error("main should not be a descendant of feat-2")
+	}
+	if e.IsBranchDescendant("feat-1", "feat-1") {
+		t.Error("a branch should not be a descendant of itself")
+	}
+}
+
+func TestSubtreeMembers_Linear(t *testing.T) {
+	e := newTestEngine(t, linearTestGraph(), "main")
+	members := e.SubtreeMembers("feat-1")
+	if len(members) != 1 {
+		t.Fatalf("got %d members, want 1", len(members))
+	}
+	if members[0].Branch.Name != "feat-2" || members[0].Parent != "feat-1" {
+		t.Errorf(
+			"got {%q, %q}, want {feat-2, feat-1}",
+			members[0].Branch.Name,
+			members[0].Parent,
+		)
+	}
+}
+
+func TestSubtreeMembers_Branching(t *testing.T) {
+	// main(c0) ← feat-1(c1) ← feat-2(c2)
+	//                        ← feat-3(c3)
+	g := git.NewGraph(
+		map[string][]string{
+			"c1": {"c0"},
+			"c2": {"c1"},
+			"c3": {"c1"},
+		},
+		map[string]string{
+			"main":   "c0",
+			"feat-1": "c1",
+			"feat-2": "c2",
+			"feat-3": "c3",
+		},
+	)
+	e := newTestEngine(t, g, "main")
+	members := e.SubtreeMembers("feat-1")
+
+	if len(members) != 2 {
+		t.Fatalf("got %d members, want 2: %v", len(members), members)
+	}
+	for _, m := range members {
+		if m.Parent != "feat-1" {
+			t.Errorf("member %q has parent %q, want feat-1", m.Branch.Name, m.Parent)
+		}
+	}
+}
+
+func TestSubtreeMembers_Empty(t *testing.T) {
+	e := newTestEngine(t, linearTestGraph(), "main")
+	members := e.SubtreeMembers("feat-2")
+	if len(members) != 0 {
+		t.Errorf("got %d members, want 0", len(members))
+	}
+}
