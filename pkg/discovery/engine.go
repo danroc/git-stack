@@ -366,6 +366,7 @@ func (e *Engine) SubtreeMembers(branchName string) []BranchWithParent {
 	if node == nil {
 		return nil
 	}
+
 	var result []BranchWithParent
 	for _, child := range node.Children {
 		collectSubtreeMembers(child, branchName, &result)
@@ -391,7 +392,14 @@ func findTreeNode(root *TreeNode, name string) *TreeNode {
 }
 
 func collectSubtreeMembers(node *TreeNode, parent string, result *[]BranchWithParent) {
-	*result = append(*result, BranchWithParent{Branch: node.Branch, Parent: parent})
+	*result = append(
+		*result,
+		BranchWithParent{
+			Branch: node.Branch,
+			Parent: parent,
+		},
+	)
+
 	for _, child := range node.Children {
 		collectSubtreeMembers(child, node.Branch.Name, result)
 	}
