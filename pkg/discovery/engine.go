@@ -25,6 +25,7 @@ type ChooseBranchFn func(action string, choices []string) (string, error)
 // and then queried in-process.
 type Engine struct {
 	baseBranch string
+	baseHead   string
 	git        *git.Client
 	graph      *git.Graph
 }
@@ -38,7 +39,13 @@ func NewEngine(
 	if err != nil {
 		return nil, fmt.Errorf("loading commit graph: %w", err)
 	}
-	return &Engine{git: g, baseBranch: baseBranch, graph: graph}, nil
+	baseHead, _ := graph.HeadOf(baseBranch)
+	return &Engine{
+		git:        g,
+		baseBranch: baseBranch,
+		baseHead:   baseHead,
+		graph:      graph,
+	}, nil
 }
 
 // BaseBranch returns the base branch that anchors the bottom of every stack.
@@ -204,6 +211,20 @@ func (e *Engine) buildChildren(node *TreeNode) {
 	}
 }
 
+// isAbove reports whether candidateHead is strictly above parentHead in the
+// stack. When parentHead is the base boundary (not loaded into the graph), it
+// falls back to graph.Contains since any commit in the graph is above the base
+// by definition.
+func (e *Engine) isAbove(parentHead, candidateHead string) bool {
+	if candidateHead == parentHead {
+		return false
+	}
+	if parentHead == e.baseHead {
+		return e.graph.Contains(candidateHead)
+	}
+	return e.graph.IsAncestor(parentHead, candidateHead)
+}
+
 // directChildren returns branches stacked directly on top of parent: one level above
 // it with no intermediate branch between them. Also checks git config for diverged
 // branches and persists discoveries.
@@ -211,35 +232,26 @@ func (e *Engine) directChildren(parent string) []string {
 	parentHead, _ := e.graph.HeadOf(parent)
 
 	// Collect all branches stacked on top of parent (further from base).
+	// Branches with a configured parent pointing elsewhere are excluded: they
+	// belong to a different sub-tree.
 	aboveSet := make(map[string]bool)
 	for _, branch := range e.graph.Branches() {
 		if branch == parent || branch == e.baseBranch {
 			continue
 		}
+
 		head, ok := e.graph.HeadOf(branch)
 		if !ok {
 			continue
 		}
 
-		if parent == e.baseBranch {
-			// The base head is not in the graph, so IsAncestor can't be used. Any
-			// branch whose head is in the graph is above the base by definition.
-			//
-			// Branches with a non-base configured parent are skipped: without this,
-			// two branches at the same HEAD would mutually exclude each other in the
-			// directness filter (IsAncestor returns true for equal commits).
-			if e.graph.Contains(head) {
-				if configParent, ok := e.git.GetStackParent(
-					branch,
-				); ok && configParent != e.baseBranch {
-					continue
-				}
-				aboveSet[branch] = true
+		if e.isAbove(parentHead, head) {
+			if configParent, ok := e.git.GetStackParent(
+				branch,
+			); ok && configParent != parent {
+				continue
 			}
-		} else {
-			if head != parentHead && e.graph.IsAncestor(parentHead, head) {
-				aboveSet[branch] = true
-			}
+			aboveSet[branch] = true
 		}
 	}
 
@@ -249,6 +261,7 @@ func (e *Engine) directChildren(parent string) []string {
 		if aboveSet[branch] || branch == parent || branch == e.baseBranch {
 			continue
 		}
+
 		configParent, ok := e.git.GetStackParent(branch)
 		if ok && configParent == parent {
 			aboveSet[branch] = true
@@ -261,21 +274,36 @@ func (e *Engine) directChildren(parent string) []string {
 	}
 	slices.Sort(above)
 
+	// Use all non-base branches as potential intermediates. Config-excluded branches
+	// are not candidates but may still sit topologically between parent and a
+	// candidate.
+	all := e.graph.Branches()
+	intermediates := make([]string, 0, len(all))
+	for _, b := range all {
+		if b != e.baseBranch {
+			intermediates = append(intermediates, b)
+		}
+	}
+
 	// Filter to only direct children (no intermediate branch between parent and child).
 	var direct []string
 	for _, candidate := range above {
 		candidateHead, _ := e.graph.HeadOf(candidate)
 		isDirect := true
-		for _, other := range above {
+		for _, other := range intermediates {
 			if other == candidate {
 				continue
 			}
+
 			otherHead, _ := e.graph.HeadOf(other)
-			if otherHead != parentHead && e.graph.IsAncestor(otherHead, candidateHead) {
+			if otherHead != parentHead && otherHead != candidateHead &&
+				e.graph.IsAncestor(otherHead, candidateHead) &&
+				e.isAbove(parentHead, otherHead) {
 				isDirect = false
 				break
 			}
 		}
+
 		if isDirect {
 			direct = append(direct, candidate)
 		}

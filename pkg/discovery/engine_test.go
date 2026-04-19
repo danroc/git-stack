@@ -20,7 +20,13 @@ func initTestRepo(t *testing.T) *git.Client {
 
 func newTestEngine(t *testing.T, g *git.Graph, baseBranch string) *Engine {
 	t.Helper()
-	return &Engine{git: initTestRepo(t), baseBranch: baseBranch, graph: g}
+	baseHead, _ := g.HeadOf(baseBranch)
+	return &Engine{
+		git:        initTestRepo(t),
+		baseBranch: baseBranch,
+		baseHead:   baseHead,
+		graph:      g,
+	}
 }
 
 // linearTestGraph: main(c0) ← feat-1(c1) ← feat-2(c2)
@@ -155,6 +161,206 @@ func TestDirectChildren(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// coEqualTestGraph: main(c0) ← feat-1(c1) ← feat-2a(c2)
+//
+//	└─ feat-2b(c2)  // same commit as feat-2a
+func coEqualTestGraph() *git.Graph {
+	return git.NewGraph(
+		map[string][]string{
+			"c1": {"c0"},
+			"c2": {"c1"},
+		},
+		map[string]string{
+			"main":    "c0",
+			"feat-1":  "c1",
+			"feat-2a": "c2",
+			"feat-2b": "c2",
+		},
+	)
+}
+
+// configParentCoEqualGraph: main(c0) ← test-1(c1) ← test-3(c2)
+//
+//	└─ test-4(c2)  // co-equal with test-3, declared child of test-3 via config
+func configParentCoEqualGraph() *git.Graph {
+	return git.NewGraph(
+		map[string][]string{
+			"c1": {"c0"},
+			"c2": {"c1"},
+		},
+		map[string]string{
+			"main":   "c0",
+			"test-1": "c1",
+			"test-3": "c2",
+			"test-4": "c2",
+		},
+	)
+}
+
+// TestDirectChildren_ConfigParentOverridesTopology verifies that a branch with an
+// explicit stackParent config is placed under its declared parent, not its topological
+// ancestor. test-4 is co-equal with test-3 (same commit) but declares test-3 as its
+// parent, so it must appear under test-3 and not under test-1.
+func TestDirectChildren_ConfigParentOverridesTopology(t *testing.T) {
+	e := newTestEngine(t, configParentCoEqualGraph(), "main")
+	if err := e.git.SetStackParent("test-4", "test-3"); err != nil {
+		t.Fatal(err)
+	}
+
+	got1 := e.directChildren("test-1")
+	want1 := []string{"test-3"}
+	if len(got1) != len(want1) || (len(got1) > 0 && got1[0] != want1[0]) {
+		t.Errorf("directChildren(test-1) = %v, want %v", got1, want1)
+	}
+
+	got3 := e.directChildren("test-3")
+	want3 := []string{"test-4"}
+	if len(got3) != len(want3) || (len(got3) > 0 && got3[0] != want3[0]) {
+		t.Errorf("directChildren(test-3) = %v, want %v", got3, want3)
+	}
+}
+
+// TestDirectChildren_ConfigExcludedIntermediateBlocks verifies that a branch
+// excluded from the candidate set via configParent still acts as a topological
+// intermediate and blocks candidates above it.
+func TestDirectChildren_ConfigExcludedIntermediateBlocks(t *testing.T) {
+	// main(c0) ← feat-A(c1) ← feat-B(c2) ← feat-C(c3)
+	// feat-B's configParent points away from feat-A, so it is excluded from
+	// directChildren("feat-A")'s candidate set. But feat-B sits topologically
+	// between feat-A and feat-C, so feat-C must not be returned as a direct child.
+	g := git.NewGraph(
+		map[string][]string{
+			"c1": {"c0"},
+			"c2": {"c1"},
+			"c3": {"c2"},
+		},
+		map[string]string{
+			"main":   "c0",
+			"feat-A": "c1",
+			"feat-B": "c2",
+			"feat-C": "c3",
+		},
+	)
+	e := newTestEngine(t, g, "main")
+	if err := e.git.SetStackParent("feat-B", "some-other-parent"); err != nil {
+		t.Fatal(err)
+	}
+
+	got := e.directChildren("feat-A")
+	if len(got) != 0 {
+		t.Errorf("directChildren(feat-A) = %v, want []", got)
+	}
+}
+
+func TestDirectChildren_CoEqualBranches(t *testing.T) {
+	// Two branches sharing the same HEAD commit must both appear as direct
+	// children of their common parent; neither should block the other.
+	e := newTestEngine(t, coEqualTestGraph(), "main")
+	got := e.directChildren("feat-1")
+	want := []string{"feat-2a", "feat-2b"}
+	if len(got) != len(want) {
+		t.Fatalf("directChildren(\"feat-1\") = %v, want %v", got, want)
+	}
+	for i, b := range want {
+		if got[i] != b {
+			t.Errorf("[%d] = %q, want %q", i, got[i], b)
+		}
+	}
+}
+
+// virtualStackTestGraph: main(c0) ─┬─ feat-inter(c1)  [sibling of feat-1 from c0]
+//
+//	└─ feat-1(c2) ← feat-2a(c3)
+//	              └─ feat-2b(c3)
+//
+// feat-1's config parent is set to "feat-inter" (virtual stack via config,
+// not topology). feat-2a and feat-2b share the same commit.
+func virtualStackTestGraph() *git.Graph {
+	return git.NewGraph(
+		map[string][]string{
+			"c1": {"c0"},
+			"c2": {"c0"},
+			"c3": {"c2"},
+		},
+		map[string]string{
+			"main":       "c0",
+			"feat-inter": "c1",
+			"feat-1":     "c2",
+			"feat-2a":    "c3",
+			"feat-2b":    "c3",
+		},
+	)
+}
+
+// TestBuildTree_CoEqualBranches_VirtualStack verifies that co-equal branches
+// (feat-2a, feat-2b) do not appear as direct children of main when a
+// topological intermediate (feat-1) has a non-base config parent.
+func TestBuildTree_CoEqualBranches_VirtualStack(t *testing.T) {
+	e := newTestEngine(t, virtualStackTestGraph(), "main")
+	if err := e.git.SetStackParent("feat-1", "feat-inter"); err != nil {
+		t.Fatal(err)
+	}
+
+	root := e.BuildTree()
+
+	// main should have exactly one direct child: feat-inter.
+	if len(root.Children) != 1 || root.Children[0].Branch.Name != "feat-inter" {
+		names := make([]string, len(root.Children))
+		for i, c := range root.Children {
+			names[i] = c.Branch.Name
+		}
+		t.Fatalf("root.Children = %v, want [feat-inter]", names)
+	}
+
+	featInter := root.Children[0]
+	if len(featInter.Children) != 1 || featInter.Children[0].Branch.Name != "feat-1" {
+		t.Fatalf("feat-inter.Children = %v, want [feat-1]", featInter.Children)
+	}
+
+	feat1 := featInter.Children[0]
+	if len(feat1.Children) != 2 {
+		t.Fatalf(
+			"feat-1 has %d children, want 2: %v",
+			len(feat1.Children),
+			feat1.Children,
+		)
+	}
+	names := []string{feat1.Children[0].Branch.Name, feat1.Children[1].Branch.Name}
+	want := []string{"feat-2a", "feat-2b"}
+	for i, w := range want {
+		if names[i] != w {
+			t.Errorf("feat-1.Children[%d] = %q, want %q", i, names[i], w)
+		}
+	}
+}
+
+func TestBuildTree_CoEqualBranches(t *testing.T) {
+	e := newTestEngine(t, coEqualTestGraph(), "main")
+	root := e.BuildTree()
+
+	if len(root.Children) != 1 {
+		t.Fatalf("root has %d children, want 1", len(root.Children))
+	}
+	feat1 := root.Children[0]
+	if feat1.Branch.Name != "feat-1" {
+		t.Fatalf("root.Children[0] = %q, want feat-1", feat1.Branch.Name)
+	}
+	if len(feat1.Children) != 2 {
+		t.Fatalf(
+			"feat-1 has %d children, want 2: %v",
+			len(feat1.Children),
+			feat1.Children,
+		)
+	}
+	names := []string{feat1.Children[0].Branch.Name, feat1.Children[1].Branch.Name}
+	want := []string{"feat-2a", "feat-2b"}
+	for i, w := range want {
+		if names[i] != w {
+			t.Errorf("feat-1.Children[%d] = %q, want %q", i, names[i], w)
+		}
 	}
 }
 

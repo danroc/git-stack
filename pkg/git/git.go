@@ -13,7 +13,8 @@ import (
 
 // Client executes git commands in a fixed working directory.
 type Client struct {
-	dir string
+	dir              string
+	stackParentCache map[string]string // nil = not yet loaded
 }
 
 // NewClient returns a Client that runs all commands with cmd.Dir set to dir.
@@ -97,16 +98,53 @@ func (g *Client) CreateBranch(name string) error {
 // SetStackParent records parent as the stack parent of branch in local git config.
 func (g *Client) SetStackParent(branch, parent string) error {
 	_, err := g.run("config", "--local", "branch."+branch+".stackParent", parent)
-	return err
+	if err != nil {
+		return err
+	}
+	if g.stackParentCache != nil {
+		g.stackParentCache[branch] = parent
+	}
+	return nil
 }
 
 // GetStackParent returns the configured stack parent, or ("", false) if unset.
+// All values are loaded in a single git config call on first use and cached.
 func (g *Client) GetStackParent(branch string) (string, bool) {
-	out, err := g.run("config", "--get", "branch."+branch+".stackParent")
-	if err != nil {
-		return "", false
+	if g.stackParentCache == nil {
+		g.loadStackParentCache()
 	}
-	return out, true
+	parent, ok := g.stackParentCache[branch]
+	return parent, ok
+}
+
+// loadStackParentCache loads all branch.*.stackParent entries from local git
+// config in a single subprocess call.
+func (g *Client) loadStackParentCache() {
+	g.stackParentCache = make(map[string]string)
+	out, err := g.run("config", "--local", "--list")
+	if err != nil {
+		return
+	}
+
+	for line := range strings.SplitSeq(out, "\n") {
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+
+		// 1. git config key format: section.subsection.variable
+		// 2. Section and variable are case-insensitive (lowercased in output).
+		// 3. Subsection is the branch name and is case-sensitive — preserve its case.
+		section, rest, ok := strings.Cut(key, ".")
+		if !ok || !strings.EqualFold(section, "branch") {
+			continue
+		}
+		lastDot := strings.LastIndexByte(rest, '.')
+		if lastDot < 0 || !strings.EqualFold(rest[lastDot+1:], "stackparent") {
+			continue
+		}
+		g.stackParentCache[rest[:lastDot]] = value
+	}
 }
 
 // getUpstream returns the remote and remote-tracking branch for a local branch. Returns
