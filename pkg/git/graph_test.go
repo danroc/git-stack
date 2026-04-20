@@ -15,10 +15,10 @@ func linearGraph() *Graph {
 			"feat-1": "c1",
 			"feat-2": "c2",
 		},
-		branchAt: map[string]string{
-			"c0": "main",
-			"c1": "feat-1",
-			"c2": "feat-2",
+		branchAt: map[string][]string{
+			"c0": {"main"},
+			"c1": {"feat-1"},
+			"c2": {"feat-2"},
 		},
 	}
 }
@@ -66,18 +66,26 @@ func TestGraph_BranchAt(t *testing.T) {
 	g := linearGraph()
 	tests := []struct {
 		hash string
-		want string
+		want []string
 		ok   bool
 	}{
-		{"c1", "feat-1", true},
-		{"c2", "feat-2", true},
-		{"c99", "", false},
+		{"c1", []string{"feat-1"}, true},
+		{"c2", []string{"feat-2"}, true},
+		{"c99", nil, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.hash, func(t *testing.T) {
 			got, ok := g.BranchAt(tt.hash)
-			if ok != tt.ok || got != tt.want {
-				t.Errorf("got %q, %v; want %q, %v", got, ok, tt.want, tt.ok)
+			if ok != tt.ok {
+				t.Fatalf("ok = %v, want %v", ok, tt.ok)
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+			for i, b := range tt.want {
+				if got[i] != b {
+					t.Errorf("[%d] = %q, want %q", i, got[i], b)
+				}
 			}
 		})
 	}
@@ -160,5 +168,28 @@ func TestGraph_CommitsAhead(t *testing.T) {
 				t.Errorf("got %d, want %d", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestGraph_BranchAt_MultipleBranches(t *testing.T) {
+	g := NewGraph(
+		map[string][]string{"c1": {"c0"}},
+		map[string]string{
+			"main":   "c0",
+			"feat-a": "c1",
+			"feat-b": "c1", // same HEAD as feat-a
+		},
+	)
+	branches, ok := g.BranchAt("c1")
+	if !ok {
+		t.Fatal("expected c1 to have branches")
+	}
+	if len(branches) != 2 {
+		t.Fatalf("got %d branches at c1, want 2: %v", len(branches), branches)
+	}
+	// Names returned in any order; check set membership.
+	seen := map[string]bool{branches[0]: true, branches[1]: true}
+	if !seen["feat-a"] || !seen["feat-b"] {
+		t.Errorf("got %v, want {feat-a, feat-b}", branches)
 	}
 }

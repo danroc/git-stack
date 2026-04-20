@@ -13,7 +13,7 @@ import (
 type Graph struct {
 	parents  map[string][]string // commit_hash → parent_hashes
 	heads    map[string]string   // branch_name → commit_hash
-	branchAt map[string]string   // commit_hash → branch_name
+	branchAt map[string][]string // commit_hash → branch_names (sorted)
 }
 
 // LoadGraph builds the commit graph for all local branches relative to baseBranch. It
@@ -59,14 +59,17 @@ func (g *Client) buildGraph(
 	graph := &Graph{
 		parents:  make(map[string][]string),
 		heads:    heads,
-		branchAt: make(map[string]string),
+		branchAt: make(map[string][]string),
 	}
 	if len(heads) == 0 {
 		return graph, nil
 	}
 
 	for branch, hash := range heads {
-		graph.branchAt[hash] = branch
+		graph.branchAt[hash] = append(graph.branchAt[hash], branch)
+	}
+	for _, names := range graph.branchAt {
+		slices.Sort(names)
 	}
 
 	// This produces commit hashes along with their parent hashes, for all commits
@@ -92,11 +95,15 @@ func (g *Client) buildGraph(
 	return graph, nil
 }
 
-// NewGraph constructs a Graph from raw commit data.
+// NewGraph constructs a Graph from raw commit data. When two branches share a
+// HEAD, both are retained in branchAt at that commit, sorted alphabetically.
 func NewGraph(parents map[string][]string, heads map[string]string) *Graph {
-	branchAt := make(map[string]string, len(heads))
+	branchAt := make(map[string][]string, len(heads))
 	for branch, hash := range heads {
-		branchAt[hash] = branch
+		branchAt[hash] = append(branchAt[hash], branch)
+	}
+	for _, names := range branchAt {
+		slices.Sort(names)
 	}
 	return &Graph{parents: parents, heads: heads, branchAt: branchAt}
 }
@@ -114,11 +121,11 @@ func (g *Graph) HeadOf(branch string) (string, bool) {
 	return h, ok
 }
 
-// BranchAt returns the branch whose HEAD is hash. When two branches share the same
-// HEAD, one is returned non-deterministically.
-func (g *Graph) BranchAt(hash string) (string, bool) {
-	b, ok := g.branchAt[hash]
-	return b, ok
+// BranchAt returns all branches whose HEAD is at hash, sorted alphabetically.
+// Returns (nil, false) when no branch points at hash.
+func (g *Graph) BranchAt(hash string) ([]string, bool) {
+	branches, ok := g.branchAt[hash]
+	return branches, ok
 }
 
 // Branches returns all local branch names known to the graph, sorted alphabetically.

@@ -129,8 +129,10 @@ func (e *Engine) traceAncestors(currentBranch string) ([]Branch, error) {
 
 	var chain []Branch
 	for commit := currentHead; e.graph.Contains(commit); {
-		if branch, ok := e.graph.BranchAt(commit); ok {
-			chain = append(chain, Branch{Name: branch, Head: commit})
+		if branches, ok := e.graph.BranchAt(commit); ok {
+			for _, branch := range branches {
+				chain = append(chain, Branch{Name: branch, Head: commit})
+			}
 		}
 		parent, ok := e.graph.FirstParent(commit)
 		if !ok {
