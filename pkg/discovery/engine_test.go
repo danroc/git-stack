@@ -529,6 +529,32 @@ func TestSubtreeMembers_Empty(t *testing.T) {
 	}
 }
 
+// TestIsBranchDescendant_ViaConfigChain verifies that a diverged descendant
+// still reports as a descendant via its stackParent config chain.
+func TestIsBranchDescendant_ViaConfigChain(t *testing.T) {
+	// main(c0) ← feat-1(c2) [advanced]
+	//                   feat-2(c1) [stayed behind, config parent = feat-1]
+	g := git.NewGraph(
+		map[string][]string{
+			"c0": {},
+			"c1": {"c0"},
+			"c2": {"c1"},
+		},
+		map[string]string{
+			"main":   "c0",
+			"feat-1": "c2",
+			"feat-2": "c1",
+		},
+	)
+	e := newTestEngine(t, g, "main")
+	if err := e.git.SetStackParent("feat-2", "feat-1"); err != nil {
+		t.Fatal(err)
+	}
+	if !e.IsBranchDescendant("feat-1", "feat-2") {
+		t.Error("feat-2 should still be a descendant of feat-1 via config chain")
+	}
+}
+
 // TestTraceChainTo_CoLocatedConfiguredSibling verifies that when two branches
 // share a HEAD and config says one is the stack parent of the other, the
 // configured parent appears in the traced chain immediately below the target.

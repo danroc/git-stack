@@ -464,9 +464,14 @@ func (e *Engine) Parent(branch string) (string, error) {
 	return chain[len(chain)-2].Name, nil
 }
 
-// IsBranchDescendant reports whether descendant's head is reachable from
-// ancestor's head in the commit graph (i.e. descendant is a commit-graph
-// descendant of ancestor).
+// IsBranchDescendant reports whether descendant is strictly below ancestor in
+// the stack tree. This is true if the commit graph shows descendant above
+// ancestor, OR descendant's stackParent config chain reaches ancestor.
+//
+// The config-chain case covers divergence: when a parent branch advances past
+// a child, graph ancestry alone loses the relationship, but the stack tree
+// still considers the child a descendant. Callers like stack.Move rely on this
+// for cycle detection.
 func (e *Engine) IsBranchDescendant(ancestor, descendant string) bool {
 	ancestorHead, ok := e.graph.HeadOf(ancestor)
 	if !ok {
@@ -479,7 +484,24 @@ func (e *Engine) IsBranchDescendant(ancestor, descendant string) bool {
 	if ancestorHead == descHead {
 		return false
 	}
-	return e.graph.IsAncestor(ancestorHead, descHead)
+	if e.graph.IsAncestor(ancestorHead, descHead) {
+		return true
+	}
+
+	// Config-chain fallback: walk descendant's stackParent upward looking for
+	// ancestor. Guarded against cycles by a visited set.
+	visited := map[string]bool{descendant: true}
+	for current := descendant; ; {
+		parent, ok := e.git.GetStackParent(current)
+		if !ok || visited[parent] {
+			return false
+		}
+		if parent == ancestor {
+			return true
+		}
+		visited[parent] = true
+		current = parent
+	}
 }
 
 // SubtreeMembers returns all branches in the subtree rooted at branchName (excluding
