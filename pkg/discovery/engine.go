@@ -281,98 +281,162 @@ func (e *Engine) isAbove(parentHead, candidateHead string) bool {
 	return e.graph.IsAncestor(parentHead, candidateHead)
 }
 
-// directChildren returns branches stacked directly on top of parent: one level above
-// it with no intermediate branch between them. Also checks git config for diverged
-// branches and persists discoveries.
+// directChildren returns branches stacked directly on top of parent. The graph
+// is authoritative: a branch is a direct child if it is above parent in the
+// graph and no other branch sits strictly between them. Config is consulted
+// only for two ambiguities:
+//
+//  1. Co-located branches: when two branches share a HEAD and one's
+//     stackParent names the other, the named one stays as direct child of
+//     parent; the other demotes to a child of its config-parent.
+//  2. Divergence: when a branch's stackParent config names parent but the
+//     branch is not in the graph-above set (parent has moved past it).
+//
+// If a branch above parent sits at a commit shared by multiple branches, the
+// edge case "child above co-located pair" applies: the child is assigned to
+// its configured parent if named, else to the alphabetically-first co-located
+// branch, and that choice is persisted to config.
+//
+// Every branch in the final set has its stackParent written to config.
 func (e *Engine) directChildren(parent string) []string {
 	parentHead, _ := e.graph.HeadOf(parent)
 
-	// Collect all branches stacked on top of parent (further from base).
-	// Branches with a configured parent pointing elsewhere are excluded: they
-	// belong to a different sub-tree.
-	aboveSet := make(map[string]bool)
+	// Step 1 — graph-above set.
+	above := make(map[string]bool)
 	for _, branch := range e.graph.Branches() {
 		if branch == parent || branch == e.baseBranch {
 			continue
 		}
-
 		head, ok := e.graph.HeadOf(branch)
 		if !ok {
 			continue
 		}
-
 		if e.isAbove(parentHead, head) {
-			if configParent, ok := e.git.GetStackParent(
-				branch,
-			); ok && configParent != parent {
-				continue
-			}
-			aboveSet[branch] = true
+			above[branch] = true
 		}
 	}
 
-	// Config fallback: add branches whose stackParent is parent but weren't found via
-	// graph ancestry (diverged branches).
-	for _, branch := range e.graph.Branches() {
-		if aboveSet[branch] || branch == parent || branch == e.baseBranch {
+	// Step 2 — co-location handling among branches already in the set.
+	// If X and Y share a HEAD and one's stackParent names the other, demote
+	// the configured-child.
+	for _, b := range e.graph.Branches() {
+		if !above[b] {
 			continue
 		}
-
-		configParent, ok := e.git.GetStackParent(branch)
-		if ok && configParent == parent {
-			aboveSet[branch] = true
+		bHead, _ := e.graph.HeadOf(b)
+		coLocated, _ := e.graph.BranchAt(bHead)
+		if len(coLocated) < 2 {
+			continue
+		}
+		configParent, ok := e.git.GetStackParent(b)
+		if !ok {
+			continue
+		}
+		if above[configParent] && configParent != b {
+			delete(above, b)
 		}
 	}
 
-	above := make([]string, 0, len(aboveSet))
-	for branch := range aboveSet {
-		above = append(above, branch)
-	}
-	slices.Sort(above)
-
-	// Use all non-base branches as potential intermediates. Config-excluded branches
-	// are not candidates but may still sit topologically between parent and a
-	// candidate.
-	all := e.graph.Branches()
-	intermediates := make([]string, 0, len(all))
-	for _, b := range all {
-		if b != e.baseBranch {
-			intermediates = append(intermediates, b)
-		}
-	}
-
-	// Filter to only direct children (no intermediate branch between parent and child).
-	var direct []string
-	for _, candidate := range above {
-		candidateHead, _ := e.graph.HeadOf(candidate)
+	// Step 3 — graph-direct filter. Drop C if some D sits strictly between
+	// parent and C. Intermediates are checked against every branch, not just
+	// members of `above`, so a non-candidate still blocks.
+	direct := make(map[string]bool)
+	for candidate := range above {
+		cHead, _ := e.graph.HeadOf(candidate)
 		isDirect := true
-		for _, other := range intermediates {
-			if other == candidate {
+		for _, other := range e.graph.Branches() {
+			if other == candidate || other == e.baseBranch || other == parent {
 				continue
 			}
-
-			otherHead, _ := e.graph.HeadOf(other)
-			if otherHead != parentHead && otherHead != candidateHead &&
-				e.graph.IsAncestor(otherHead, candidateHead) &&
-				e.isAbove(parentHead, otherHead) {
+			oHead, _ := e.graph.HeadOf(other)
+			if oHead == parentHead || oHead == cHead {
+				continue
+			}
+			if e.isAbove(parentHead, oHead) && e.graph.IsAncestor(oHead, cHead) {
 				isDirect = false
 				break
 			}
 		}
-
 		if isDirect {
-			direct = append(direct, candidate)
+			direct[candidate] = true
 		}
 	}
 
-	// Persist discovered relationships, but don't overwrite existing config.
-	for _, child := range direct {
-		if _, ok := e.git.GetStackParent(child); !ok {
-			e.persistParent(child, parent)
+	// Step 3.5 — "child above co-located pair" edge case.
+	// If candidate C's first-parent chain lands on a commit shared by multiple
+	// branches, C would be reported as a direct child of each of them. Assign
+	// C to its configured parent if named; otherwise to the alphabetically-
+	// first co-located branch (and ensure C is a direct child only of the
+	// owner).
+	for candidate := range direct {
+		cHead, _ := e.graph.HeadOf(candidate)
+		owner := e.coLocatedOwnerFor(candidate, cHead)
+		if owner != "" && owner != parent {
+			ownerHead, _ := e.graph.HeadOf(owner)
+			if parentHead == ownerHead {
+				// `parent` and `owner` share a commit; only `owner` should
+				// claim this candidate.
+				delete(direct, candidate)
+			}
 		}
 	}
 
-	return direct
+	// Step 4 — divergence recovery. Branches whose stackParent config names
+	// parent but that aren't in the direct set.
+	for _, branch := range e.graph.Branches() {
+		if direct[branch] || branch == parent || branch == e.baseBranch {
+			continue
+		}
+		configParent, ok := e.git.GetStackParent(branch)
+		if ok && configParent == parent {
+			direct[branch] = true
+		}
+	}
+
+	// Finalize and sort.
+	result := make([]string, 0, len(direct))
+	for b := range direct {
+		result = append(result, b)
+	}
+	slices.Sort(result)
+
+	// Step 5 — persist (always-write).
+	for _, child := range result {
+		e.persistParent(child, parent)
+	}
+
+	return result
+}
+
+// coLocatedOwnerFor determines which co-located branch (if any) "owns"
+// candidate when candidate sits above multiple branches sharing the same HEAD
+// commit in candidate's first-parent chain.
+//
+// Returns "" if candidate's first-parent chain encounters a commit with a
+// single branch before it encounters a co-located multi-branch commit (no
+// ambiguity at the nearest branch level). Otherwise returns the owning
+// branch: the one named by candidate.stackParent if it is among the
+// co-located set, else the alphabetically-first co-located branch.
+func (e *Engine) coLocatedOwnerFor(candidate, candidateHead string) string {
+	configParent, hasConfig := e.git.GetStackParent(candidate)
+	for commit, ok := e.graph.FirstParent(candidateHead); ok; commit, ok = e.graph.FirstParent(commit) {
+		branches, haveBranches := e.graph.BranchAt(commit)
+		if !haveBranches {
+			continue
+		}
+		if len(branches) < 2 {
+			return ""
+		}
+		if hasConfig {
+			for _, b := range branches {
+				if b == configParent {
+					return b
+				}
+			}
+		}
+		return branches[0]
+	}
+	return ""
 }
 
 // Parent returns the immediate stack parent of branch. It first checks git config; if

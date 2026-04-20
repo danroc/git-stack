@@ -567,6 +567,29 @@ func TestTraceChainTo_CoLocatedConfiguredSibling(t *testing.T) {
 	}
 }
 
+// TestDirectChildren_StaleConfigLosesToUnambiguousGraph verifies that when
+// config declares a branch's parent incorrectly and the graph unambiguously
+// shows a different parent, the graph wins and config gets rewritten.
+func TestDirectChildren_StaleConfigLosesToUnambiguousGraph(t *testing.T) {
+	// Linear: main(c0) ← feat-1(c1) ← feat-2(c2)
+	// feat-2.stackParent is set to "main" (wrong); graph shows feat-2 above feat-1.
+	g := linearTestGraph()
+	e := newTestEngine(t, g, "main")
+	if err := e.git.SetStackParent("feat-2", "main"); err != nil {
+		t.Fatal(err)
+	}
+
+	children := e.directChildren("feat-1")
+	if len(children) != 1 || children[0] != "feat-2" {
+		t.Errorf("directChildren(feat-1) = %v, want [feat-2]", children)
+	}
+	// Config should have been repaired.
+	got, ok := e.git.GetStackParent("feat-2")
+	if !ok || got != "feat-1" {
+		t.Errorf("feat-2 stackParent = %q (ok=%v), want feat-1", got, ok)
+	}
+}
+
 // TestTraceChainTo_CoLocatedSiblingsByDefault verifies that without a config
 // hint, a co-located sibling does NOT appear in the target's chain (they are
 // siblings, not parent/child).
