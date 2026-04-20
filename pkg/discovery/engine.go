@@ -309,7 +309,7 @@ func (e *Engine) directChildren(parent string) []string {
 	// Persist discovered relationships, but don't overwrite existing config.
 	for _, child := range direct {
 		if _, ok := e.git.GetStackParent(child); !ok {
-			_ = e.git.SetStackParent(child, parent)
+			e.persistParent(child, parent)
 		}
 	}
 
@@ -396,4 +396,10 @@ func collectSubtreeMembers(node *TreeNode, parent string, result *[]BranchWithPa
 	for _, child := range node.Children {
 		collectSubtreeMembers(child, node.Branch.Name, result)
 	}
+}
+
+// persistParent records child's immediate stack parent in git config. Errors
+// are silently swallowed: config is a hint, never a hard dependency.
+func (e *Engine) persistParent(child, parent string) {
+	_ = e.git.SetStackParent(child, parent)
 }
