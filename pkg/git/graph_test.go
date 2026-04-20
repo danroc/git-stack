@@ -8,12 +8,13 @@ import (
 )
 
 // linearGraph: main(c0) ← feat-1(c1) ← feat-2(c2)
-// c0 is NOT in parents, simulating a commit below the in-memory graph floor:
-// useful for testing that Contains/IsAncestor correctly treat out-of-range
-// commits as not loaded.
+// c0 is present as a root (the floor) with no parents, matching the
+// post-Task-3 graph shape where buildGraph loads commits down to the
+// octopus merge-base inclusive.
 func linearGraph() *Graph {
 	return &Graph{
 		parents: map[string][]string{
+			"c0": {},
 			"c1": {"c0"},
 			"c2": {"c1"},
 		},
@@ -38,7 +39,7 @@ func TestGraph_Contains(t *testing.T) {
 	}{
 		{"c1", true},
 		{"c2", true},
-		{"c0", false},  // base boundary — not in parents map
+		{"c0", true},   // floor commit is in parents under the new graph
 		{"c99", false}, // missing
 	}
 	for _, tt := range tests {
@@ -144,7 +145,7 @@ func TestGraph_IsAncestor(t *testing.T) {
 		{"forward", "c1", "c2", true},
 		{"self", "c1", "c1", true},
 		{"reverse", "c2", "c1", false},
-		{"below base boundary", "c0", "c2", false},
+		{"floor reaches descendant", "c0", "c2", true},
 		{"missing", "c99", "c2", false},
 	}
 	for _, tt := range tests {

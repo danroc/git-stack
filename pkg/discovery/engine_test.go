@@ -30,10 +30,13 @@ func newTestEngine(t *testing.T, g *git.Graph, baseBranch string) *Engine {
 }
 
 // linearTestGraph: main(c0) ← feat-1(c1) ← feat-2(c2)
-// c0 is NOT in parents (base boundary).
+// c0 is present as a root (the floor) with no parents, matching the
+// post-Task-3 graph shape where the loaded graph includes commits down to
+// the octopus merge-base inclusive.
 func linearTestGraph() *git.Graph {
 	return git.NewGraph(
 		map[string][]string{
+			"c0": {},
 			"c1": {"c0"},
 			"c2": {"c1"},
 		},
@@ -49,6 +52,7 @@ func linearTestGraph() *git.Graph {
 func branchingTestGraph() *git.Graph {
 	return git.NewGraph(
 		map[string][]string{
+			"c0": {},
 			"c1": {"c0"},
 			"c2": {"c0"},
 		},
@@ -170,6 +174,7 @@ func TestDirectChildren(t *testing.T) {
 func coEqualTestGraph() *git.Graph {
 	return git.NewGraph(
 		map[string][]string{
+			"c0": {},
 			"c1": {"c0"},
 			"c2": {"c1"},
 		},
@@ -188,6 +193,7 @@ func coEqualTestGraph() *git.Graph {
 func configParentCoEqualGraph() *git.Graph {
 	return git.NewGraph(
 		map[string][]string{
+			"c0": {},
 			"c1": {"c0"},
 			"c2": {"c1"},
 		},
@@ -233,6 +239,7 @@ func TestDirectChildren_ConfigExcludedIntermediateBlocks(t *testing.T) {
 	// between feat-A and feat-C, so feat-C must not be returned as a direct child.
 	g := git.NewGraph(
 		map[string][]string{
+			"c0": {},
 			"c1": {"c0"},
 			"c2": {"c1"},
 			"c3": {"c2"},
@@ -281,6 +288,7 @@ func TestDirectChildren_CoEqualBranches(t *testing.T) {
 func virtualStackTestGraph() *git.Graph {
 	return git.NewGraph(
 		map[string][]string{
+			"c0": {},
 			"c1": {"c0"},
 			"c2": {"c0"},
 			"c3": {"c2"},
@@ -391,6 +399,7 @@ func TestBuildTree_CommitsAhead(t *testing.T) {
 	// c1 is an intermediate commit with no branch.
 	g := git.NewGraph(
 		map[string][]string{
+			"c0": {},
 			"c1": {"c0"},
 			"c2": {"c1"},
 			"c3": {"c2"},
@@ -487,6 +496,7 @@ func TestSubtreeMembers_Branching(t *testing.T) {
 	//                        ← feat-3(c3)
 	g := git.NewGraph(
 		map[string][]string{
+			"c0": {},
 			"c1": {"c0"},
 			"c2": {"c1"},
 			"c3": {"c1"},

@@ -128,7 +128,7 @@ func (e *Engine) traceAncestors(currentBranch string) ([]Branch, error) {
 	}
 
 	var chain []Branch
-	for commit := currentHead; e.graph.Contains(commit); {
+	for commit := currentHead; e.graph.Contains(commit) && commit != baseHead; {
 		if branches, ok := e.graph.BranchAt(commit); ok {
 			for _, branch := range branches {
 				chain = append(chain, Branch{Name: branch, Head: commit})
@@ -214,15 +214,10 @@ func (e *Engine) buildChildren(node *TreeNode) {
 }
 
 // isAbove reports whether candidateHead is strictly above parentHead in the
-// stack. When parentHead is the base boundary (not loaded into the graph), it
-// falls back to graph.Contains since any commit in the graph is above the base
-// by definition.
+// commit graph (ancestor-of, and not equal).
 func (e *Engine) isAbove(parentHead, candidateHead string) bool {
 	if candidateHead == parentHead {
 		return false
-	}
-	if parentHead == e.baseHead {
-		return e.graph.Contains(candidateHead)
 	}
 	return e.graph.IsAncestor(parentHead, candidateHead)
 }
@@ -337,7 +332,8 @@ func (e *Engine) Parent(branch string) (string, error) {
 	return ancestors[len(ancestors)-2].Name, nil
 }
 
-// IsBranchDescendant reports whether descendant is strictly below ancestor in the tree.
+// IsBranchDescendant reports whether descendant is strictly above ancestor in
+// the commit graph.
 func (e *Engine) IsBranchDescendant(ancestor, descendant string) bool {
 	ancestorHead, ok := e.graph.HeadOf(ancestor)
 	if !ok {
@@ -349,13 +345,6 @@ func (e *Engine) IsBranchDescendant(ancestor, descendant string) bool {
 	}
 	if ancestorHead == descHead {
 		return false
-	}
-
-	// The base branch head is not loaded into the graph (it marks the boundary), so
-	// IsAncestor can't be used. Any branch with a head in the graph is a descendant of
-	// the base by definition.
-	if ancestor == e.baseBranch {
-		return e.graph.Contains(descHead)
 	}
 	return e.graph.IsAncestor(ancestorHead, descHead)
 }
