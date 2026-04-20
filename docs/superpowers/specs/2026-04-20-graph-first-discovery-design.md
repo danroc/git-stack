@@ -95,10 +95,10 @@ Algorithm:
 
 1. Start at `target`'s head. Walk first-parent commits.
 2. At each commit, enumerate all branches with their HEAD at that commit. Append each to the chain (order among siblings: if one of them is `target` and another is named by `target.stackParent`, place the configured parent immediately below `target`; otherwise, siblings are skipped except for `target` itself).
-3. Stop when the walk reaches `baseHead` (now loaded).
+3. Stop when the walk falls off the loaded graph (`FirstParent` has no in-graph parent). This handles three cases uniformly: reaching `baseHead`, reaching the merge-base floor when `baseBranch` has diverged from `target`, and reaching a root commit.
 4. Reverse the chain so it's bottom-to-top.
-5. **Divergence recovery.** If the bottom of the reversed chain is not `baseBranch`, the walk missed branches due to case-2 divergence. Walk `stackParent` config from the bottom-most collected branch until reaching `baseBranch` or giving up; prepend the recovered segment.
-6. Prepend `baseBranch` itself.
+5. **Divergence recovery.** If the bottom of the reversed chain is not `baseBranch`, the graph walk either couldn't reach base (base-diverged case) or missed intermediate branches because *their* HEADs diverged (case-2 per-branch divergence). Walk `stackParent` config from the bottom-most collected branch upward until reaching `baseBranch` or giving up; prepend the recovered segment.
+6. Prepend `baseBranch` itself if it isn't already at the bottom.
 7. Persist: for every adjacent pair `(child, parent)` in the final chain, call `persistParent(child, parent)` (see §5.2.6).
 
 Error surface: if neither graph nor config reaches the base, return an error naming the orphan branch.
@@ -173,6 +173,8 @@ Additive to existing `engine_test.go`:
 8. **Cycle detection with divergence.** Stack `main → feat-1 → feat-2`, advance `feat-1`, then attempt `Move(feat-1, feat-2)`. Must fail with a cycle error (validates the `IsBranchDescendant` change).
 
 9. **Child above co-located pair.** `X` and `Y` at the same commit above `main`, `T` branched from `X` with one new commit. Assert `T` appears exactly once in `BuildTree()`, under `X` (alphabetical default) or under whichever `T.stackParent` names.
+
+10. **Base-branch divergence.** `main` is at commit `M0` when `feat-1` branches off. `main` advances to `M1` (a commit not reachable from `feat-1`). With `feat-1.stackParent = main` in config: `traceChainTo(feat-1)` returns `[main, feat-1]` via divergence recovery (the graph walk alone cannot reach `baseHead` because `main` is no longer on `feat-1`'s first-parent chain).
 
 Integration test (optional, if the existing suite supports it): shell script creating a real repo, advancing `main`, and asserting `git-stack view` shows the correct tree.
 
