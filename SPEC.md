@@ -16,7 +16,9 @@ A stateless CLI tool that leverages Git primitives (`git rev-list`, `git merge-b
 2. Automate pushing and pulling for all branches in the identified stack.
 3. Handle branch ambiguity through interactive user prompts.
 
-"Stateless" means the tool writes no metadata files. The Git commit graph is the only persistent state.
+"Stateless" means the tool writes no tool-specific metadata files; branch
+relationships are persisted in local git config under `branch.<name>.stackParent`,
+which is a standard git configuration key that other tools can read if they wish.
 
 ## 4. Core Functional Requirements
 
@@ -82,23 +84,65 @@ The base branch anchors the bottom of the stack. It is resolved in the following
 
 #### Upward Trace (base → current)
 
-Use `git rev-list --first-parent <base>..<current>` to obtain the first-parent commit history between the base and the current branch. Walk these commits from oldest to newest. Whenever a commit hash matches the HEAD of a local branch, that branch is a member of the stack. The resulting ordered list — from base to current branch — forms the lower portion of the stack.
+Walk the first-parent chain from the current branch's HEAD back toward the
+loaded graph's floor. At each commit, enumerate every local branch whose HEAD
+sits there. Typical behavior:
+
+- If the current branch itself shares a commit with another branch, include the
+  other branch in the chain only when the current branch's `branch.<name>.stackParent`
+  config names it. Otherwise treat them as siblings — the other branch does not
+  appear in the current branch's chain.
+- All other branches encountered during the walk (strictly below the current
+  branch) are included in the chain.
+
+If the walk does not bottom out at the base branch — either because the base
+has advanced past the current branch's fork point, or because an intermediate
+branch has advanced past one of its children — resolve the remaining gap by
+walking the `stackParent` config chain upward from the bottom-most collected
+branch until the base is reached.
 
 #### Downward Trace (current → top)
 
-Scan all entries in `refs/heads/*`. A candidate branch `B` is a descendant of the current branch if `git merge-base --is-ancestor <current> <B>` returns true.
+Scan all entries in `refs/heads/*`. A candidate branch `B` is a descendant of
+the current branch if its HEAD is strictly above the current branch in the
+commit graph.
 
-Filter the candidates to **direct children** only: exclude any candidate `B` if another candidate `C` satisfies `git merge-base --is-ancestor <C> <B>` (i.e. `C` sits between the current branch and `B` in the history). Recurse from the chosen direct child until no further descendants are found.
+Reduce to direct children: drop any candidate `B` for which another candidate
+`D` sits strictly between the current branch and `B`. When two candidates share
+a HEAD and one's `stackParent` names the other, the named one stays and the
+other demotes (it becomes a child of its configured parent). When two
+candidates share a HEAD with no config relation, both remain as siblings.
+
+Add diverged children: for every branch whose `stackParent` config names the
+current branch but which is not in the graph-above set, include it as a direct
+child. These are branches that were children of the current branch before the
+current branch advanced past them.
+
+Recurse from each chosen child until no further descendants are found.
 
 #### Ambiguity Handling
 
-If more than one direct child is found at any step in the downward trace, prompt the user:
+If more than one direct child is found at any step in the downward trace,
+prompt the user:
 
 > _"Multiple branches detected. Which branch do you want to [action]?_
 > _(1) branch-alpha_
 > _(2) branch-beta"_
 
 The selection applies to that single invocation only and is not persisted.
+Co-located branches (two or more branches sharing a HEAD) never trigger a
+prompt on their own: absent a `stackParent` config hint, they are treated as
+siblings.
+
+#### Persistence
+
+Every discovery writes `branch.<name>.stackParent` to local git config for each
+resolved parent/child relationship. This record is consulted only when the
+commit graph is ambiguous: (1) two branches share a HEAD and we need to
+distinguish which is the parent; (2) a parent branch has advanced past a child
+so the graph alone no longer shows the stack relationship. When the graph
+gives an unambiguous answer that contradicts config, the graph wins and config
+is repaired.
 
 ### 4.3 Conflict and Error Management
 
@@ -137,4 +181,3 @@ If any operation (`push`, `pull --rebase`, `rebase`) fails for any reason:
 - Processing multiple stack paths simultaneously within a single command (bifurcations are handled by prompting the user to select one path).
 - Integration with any third-party APIs (GitHub, GitLab, etc.).
 - Management of branches outside of the identified stack lineage.
-- Persisting user choices (e.g. disambiguation selections) across invocations.
