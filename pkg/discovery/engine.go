@@ -174,6 +174,26 @@ func (e *Engine) traceChainTo(target string) ([]Branch, error) {
 	// chain is top-to-bottom; reverse to bottom-to-top.
 	slices.Reverse(chain)
 
+	// Diverged-parent insertion: if target has a configured stack parent that is
+	// not already in the chain (it has advanced past target's commit), insert it
+	// just below target so the full configured ancestry is reflected.
+	if targetConfigParent != "" {
+		inChain := false
+		for _, b := range chain {
+			if b.Name == targetConfigParent {
+				inChain = true
+				break
+			}
+		}
+		if !inChain {
+			parentHead, _ := e.graph.HeadOf(targetConfigParent)
+			inserted := Branch{Name: targetConfigParent, Head: parentHead}
+			// Insert at len(chain)-1 (just before target, which is the last element).
+			chain = append(chain[:len(chain)-1],
+				append([]Branch{inserted}, chain[len(chain)-1:]...)...)
+		}
+	}
+
 	// Divergence recovery: if the bottom of the chain isn't baseBranch, walk
 	// the stackParent config chain upward from the bottom-most collected branch
 	// until we reach baseBranch or give up.

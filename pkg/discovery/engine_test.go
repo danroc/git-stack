@@ -12,7 +12,7 @@ import (
 func initTestRepo(t *testing.T) *git.Client {
 	t.Helper()
 	dir := t.TempDir()
-	cmd := exec.Command("git", "init", dir) //nolint:gosec
+	cmd := exec.Command("git", "init", "-b", "main", dir) //nolint:gosec
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
@@ -694,5 +694,190 @@ func TestTraceChainTo_CoLocatedSiblingsByDefault(t *testing.T) {
 			names[i] = b.Name
 		}
 		t.Errorf("got %v, want [main feat-2]", names)
+	}
+}
+
+// TestDivergedParent_FullSuite covers spec §6 #4: feat-1 advances past the point
+// where feat-2 branched off it; traceChainTo, directChildren, and
+// IsBranchDescendant must all still reflect the stack relationship.
+func TestDivergedParent_FullSuite(t *testing.T) {
+	g := git.NewGraph(
+		map[string][]string{
+			"c0": {},
+			"c1": {"c0"},
+			"c2": {"c1"}, // feat-1 advanced here
+		},
+		map[string]string{
+			"main":   "c0",
+			"feat-1": "c2",
+			"feat-2": "c1", // diverged: was at c1 when feat-1 was there
+		},
+	)
+	e := newTestEngine(t, g, "main")
+	if err := e.git.SetStackParent("feat-2", "feat-1"); err != nil {
+		t.Fatal(err)
+	}
+
+	chain, err := e.traceChainTo("feat-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make([]string, len(chain))
+	for i, b := range chain {
+		got[i] = b.Name
+	}
+	want := []string{"main", "feat-1", "feat-2"}
+	if len(got) != len(want) {
+		t.Fatalf("traceChainTo(feat-2) = %v, want %v", got, want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("[%d] = %q, want %q", i, got[i], w)
+		}
+	}
+
+	dc := e.directChildren("feat-1")
+	if !slices.Contains(dc, "feat-2") {
+		t.Errorf("directChildren(feat-1) = %v, must include feat-2", dc)
+	}
+
+	if !e.IsBranchDescendant("feat-1", "feat-2") {
+		t.Error("feat-2 must be a descendant of feat-1")
+	}
+}
+
+// TestDiscoverStack_PersistsAncestorChain covers spec §6 #6: after
+// DiscoverStack runs, every adjacent (child, parent) pair in the ancestor
+// chain has its stackParent written to config.
+func TestDiscoverStack_PersistsAncestorChain(t *testing.T) {
+	e := newTestEngine(t, linearTestGraph(), "main")
+	_, err := e.DiscoverStack("feat-2", func(_ string, _ []string) (string, error) {
+		t.Fatal("chooseBranch should not be called for linear stack")
+		return "", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p1, ok := e.git.GetStackParent("feat-1")
+	if !ok || p1 != "main" {
+		t.Errorf("feat-1.stackParent = %q (ok=%v), want main", p1, ok)
+	}
+	p2, ok := e.git.GetStackParent("feat-2")
+	if !ok || p2 != "feat-1" {
+		t.Errorf("feat-2.stackParent = %q (ok=%v), want feat-1", p2, ok)
+	}
+}
+
+// TestBuildTree_ChildAboveCoLocatedPair covers spec §6 #9 (edge case in
+// §5.2.4): when a branch T sits above two co-located branches X and Y, T must
+// appear exactly once in the tree — under whichever T.stackParent names, else
+// under the alphabetically-first co-located branch.
+func TestBuildTree_ChildAboveCoLocatedPair(t *testing.T) {
+	// main(c0) ← alpha(c1), beta(c1)  // co-located
+	//                   ← tail(c2)
+	g := git.NewGraph(
+		map[string][]string{
+			"c0": {},
+			"c1": {"c0"},
+			"c2": {"c1"},
+		},
+		map[string]string{
+			"main":  "c0",
+			"alpha": "c1",
+			"beta":  "c1",
+			"tail":  "c2",
+		},
+	)
+	e := newTestEngine(t, g, "main")
+
+	root := e.BuildTree()
+
+	// Count occurrences of tail in the tree.
+	var count int
+	var walk func(n *TreeNode)
+	walk = func(n *TreeNode) {
+		if n.Branch.Name == "tail" {
+			count++
+		}
+		for _, c := range n.Children {
+			walk(c)
+		}
+	}
+	walk(root)
+
+	if count != 1 {
+		t.Errorf("tail appears %d times in tree, want 1", count)
+	}
+
+	// With no config, tail must be under alpha (alphabetical default).
+	var tailParent string
+	var findParent func(n *TreeNode, parent string)
+	findParent = func(n *TreeNode, parent string) {
+		if n.Branch.Name == "tail" {
+			tailParent = parent
+			return
+		}
+		for _, c := range n.Children {
+			findParent(c, n.Branch.Name)
+		}
+	}
+	findParent(root, "")
+	if tailParent != "alpha" {
+		t.Errorf("tail's parent = %q, want alpha (alphabetical default)", tailParent)
+	}
+}
+
+// TestTraceChainTo_BaseDivergence covers spec §6 #10: when main has advanced
+// past where feat-1 was branched, the graph walk cannot reach baseHead; the
+// divergence-recovery step completes the chain via stackParent config.
+func TestTraceChainTo_BaseDivergence(t *testing.T) {
+	c := initTestRepo(t)
+	dir := c.Dir()
+	run := func(args ...string) {
+		full := append([]string{"-C", dir}, args...)
+		cmd := exec.Command("git", full...) //nolint:gosec
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("config", "user.email", "t@t")
+	run("config", "user.name", "T")
+	run("commit", "--allow-empty", "-m", "c0")
+	run("checkout", "-q", "-b", "feat-1")
+	run("checkout", "-q", "main")
+	run("commit", "--allow-empty", "-m", "m1")
+
+	graph, err := c.LoadGraph()
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseHead, _ := graph.HeadOf("main")
+	e := &Engine{
+		git:        c,
+		baseBranch: "main",
+		baseHead:   baseHead,
+		graph:      graph,
+	}
+	if err := c.SetStackParent("feat-1", "main"); err != nil {
+		t.Fatal(err)
+	}
+
+	chain, err := e.traceChainTo("feat-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make([]string, len(chain))
+	for i, b := range chain {
+		got[i] = b.Name
+	}
+	want := []string{"main", "feat-1"}
+	if len(got) != len(want) {
+		t.Fatalf("traceChainTo(feat-1) = %v, want %v", got, want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("[%d] = %q, want %q", i, got[i], w)
+		}
 	}
 }

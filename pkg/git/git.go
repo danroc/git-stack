@@ -22,6 +22,9 @@ func NewClient(dir string) *Client {
 	return &Client{dir: dir}
 }
 
+// Dir returns the working directory this client operates in.
+func (g *Client) Dir() string { return g.dir }
+
 // Error is returned when a git subprocess exits with a non-zero status.
 type Error struct {
 	Args   []string

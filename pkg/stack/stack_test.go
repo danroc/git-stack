@@ -221,6 +221,23 @@ func (f *failingRepo) Rebase(onto string) error {
 	return nil
 }
 
+// TestMove_CycleDetectionViaConfigChain verifies that cycle detection blocks a
+// Move even when the child has diverged from the parent. The fakeDiscoverer's
+// IsBranchDescendant method encodes the stack-tree relationship; the real
+// Engine implementation (Task 11) uses the config chain for the same purpose.
+func TestMove_CycleDetectionViaConfigChain(t *testing.T) {
+	disc := &fakeDiscoverer{
+		descendants: map[[2]string]bool{
+			{"feat-1", "feat-2"}: true, // feat-2 is a descendant of feat-1
+		},
+	}
+	err := newMoveStack(&fakeRepository{currentBranch: "main"}, disc).
+		Move("feat-1", "feat-2", nil)
+	if err == nil || !strings.Contains(err.Error(), "cycle") {
+		t.Errorf("Move must fail with cycle error, got: %v", err)
+	}
+}
+
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
