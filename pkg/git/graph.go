@@ -122,10 +122,14 @@ func (g *Graph) HeadOf(branch string) (string, bool) {
 }
 
 // BranchAt returns all branches whose HEAD is at hash, sorted alphabetically.
-// Returns (nil, false) when no branch points at hash.
+// Returns (nil, false) when no branch points at hash. The returned slice is a
+// copy; callers may modify it freely.
 func (g *Graph) BranchAt(hash string) ([]string, bool) {
 	branches, ok := g.branchAt[hash]
-	return branches, ok
+	if !ok {
+		return nil, false
+	}
+	return slices.Clone(branches), true
 }
 
 // Branches returns all local branch names known to the graph, sorted alphabetically.

@@ -1,6 +1,9 @@
 package git
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 // linearGraph: main(c0) ← feat-1(c1) ← feat-2(c2)
 // c0 is NOT in parents, simulating the base-branch boundary.
@@ -184,12 +187,8 @@ func TestGraph_BranchAt_MultipleBranches(t *testing.T) {
 	if !ok {
 		t.Fatal("expected c1 to have branches")
 	}
-	if len(branches) != 2 {
-		t.Fatalf("got %d branches at c1, want 2: %v", len(branches), branches)
-	}
-	// Names returned in any order; check set membership.
-	seen := map[string]bool{branches[0]: true, branches[1]: true}
-	if !seen["feat-a"] || !seen["feat-b"] {
-		t.Errorf("got %v, want {feat-a, feat-b}", branches)
+	want := []string{"feat-a", "feat-b"}
+	if !slices.Equal(branches, want) {
+		t.Errorf("got %v, want %v (sorted alphabetically)", branches, want)
 	}
 }
