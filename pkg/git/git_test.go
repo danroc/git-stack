@@ -12,7 +12,8 @@ func initRepo(t *testing.T) (*Client, string) {
 	t.Helper()
 	dir := t.TempDir()
 	run := func(args ...string) {
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		full := append([]string{"-C", dir}, args...)
+		cmd := exec.Command("git", full...) //nolint:gosec
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}
@@ -28,7 +29,8 @@ func initRepo(t *testing.T) (*Client, string) {
 // stdout.
 func runGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	full := append([]string{"-C", dir}, args...)
+	cmd := exec.Command("git", full...) //nolint:gosec
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)

@@ -264,3 +264,13 @@ func (g *Client) MergeBaseOctopus(refs ...string) (string, error) {
 	args := append([]string{"merge-base", "--octopus"}, refs...)
 	return g.run(args...)
 }
+
+// commitHasParent reports whether hash has at least one parent commit.
+func (g *Client) commitHasParent(hash string) (bool, error) {
+	out, err := g.run("rev-list", "--parents", "-n", "1", hash)
+	if err != nil {
+		return false, err
+	}
+	// Output is "<hash> <parent> [<parent>...]" or "<hash>" for a root commit.
+	return len(strings.Fields(out)) > 1, nil
+}

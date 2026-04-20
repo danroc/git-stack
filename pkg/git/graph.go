@@ -2,6 +2,7 @@ package git
 
 import (
 	"bufio"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -16,17 +17,18 @@ type Graph struct {
 	branchAt map[string][]string // commit_hash → branch_names (sorted)
 }
 
-// LoadGraph builds the commit graph for all local branches relative to baseBranch. It
-// issues exactly two git commands:
+// LoadGraph builds the commit graph for all local branches. The graph floor is
+// the octopus merge-base of every branch head — commits at and above the floor
+// are loaded.
 //
-// 1. git for-each-ref to collect all branch heads.
-// 2. git log to load the commit DAG between those heads and baseBranch.
-func (g *Client) LoadGraph(baseBranch string) (*Graph, error) {
+// The baseBranch parameter is currently unused but retained for API stability;
+// it may be re-introduced when discovery logic needs an explicit base reference.
+func (g *Client) LoadGraph(_ string) (*Graph, error) {
 	heads, err := g.listBranchHeads()
 	if err != nil {
 		return nil, err
 	}
-	return g.buildGraph(baseBranch, heads)
+	return g.buildGraph(heads)
 }
 
 func (g *Client) listBranchHeads() (map[string]string, error) {
@@ -52,10 +54,7 @@ func (g *Client) listBranchHeads() (map[string]string, error) {
 	return heads, nil
 }
 
-func (g *Client) buildGraph(
-	baseBranch string,
-	heads map[string]string,
-) (*Graph, error) {
+func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 	graph := &Graph{
 		parents:  make(map[string][]string),
 		heads:    heads,
@@ -72,12 +71,26 @@ func (g *Client) buildGraph(
 		slices.Sort(names)
 	}
 
-	// This produces commit hashes along with their parent hashes, for all commits
-	// reachable from any branch head but not from baseBranch.
-	hashes := slices.Sorted(maps.Values(heads))
+	// Compute the floor: the merge-base of every branch head (including the base
+	// branch). Commits at and above the floor are loaded into the graph.
+	refs := slices.Sorted(maps.Values(heads))
+	floor, err := g.MergeBaseOctopus(refs...)
+	if err != nil {
+		return nil, fmt.Errorf("computing graph floor: %w", err)
+	}
+
+	// Determine whether the floor has a parent to anchor ^<floor>^. A root commit
+	// has no parents, in which case we drop the exclusion.
+	hasParent, err := g.commitHasParent(floor)
+	if err != nil {
+		return nil, fmt.Errorf("inspecting floor parent: %w", err)
+	}
+
 	args := []string{"log", "--format=%H %P"}
-	args = append(args, hashes...)
-	args = append(args, "^"+baseBranch)
+	args = append(args, refs...)
+	if hasParent {
+		args = append(args, "^"+floor+"^")
+	}
 
 	out, err := g.run(args...)
 	if err != nil {

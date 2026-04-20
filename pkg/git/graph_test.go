@@ -1,7 +1,9 @@
 package git
 
 import (
+	"os/exec"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -190,5 +192,76 @@ func TestGraph_BranchAt_MultipleBranches(t *testing.T) {
 	want := []string{"feat-a", "feat-b"}
 	if !slices.Equal(branches, want) {
 		t.Errorf("got %v, want %v (sorted alphabetically)", branches, want)
+	}
+}
+
+// initGraphRepo initializes a temp repo identical to initRepo but scoped to
+// graph tests. Duplicated to keep git package test helpers non-exported.
+func initGraphRepo(t *testing.T) (*Client, string) {
+	t.Helper()
+	dir := t.TempDir()
+	run := func(args ...string) {
+		full := append([]string{"-C", dir}, args...)
+		cmd := exec.Command("git", full...) //nolint:gosec
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("init", "-q", "-b", "main")
+	run("config", "user.email", "test@example.com")
+	run("config", "user.name", "Test")
+	run("commit", "--allow-empty", "-m", "c0")
+	return NewClient(dir), dir
+}
+
+func rev(t *testing.T, dir, ref string) string {
+	t.Helper()
+	cmd := exec.Command("git", "-C", dir, "rev-parse", ref) //nolint:gosec
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("rev-parse %s: %v\n%s", ref, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// TestLoadGraph_IncludesBaseDownToFloor verifies the loaded graph contains
+// base-branch commits down to the octopus merge-base (inclusive).
+func TestLoadGraph_IncludesBaseDownToFloor(t *testing.T) {
+	c, dir := initGraphRepo(t)
+	gi := func(args ...string) {
+		full := append([]string{"-C", dir}, args...)
+		cmd := exec.Command("git", full...) //nolint:gosec
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	// Layout: c0 (main@fork) ─ m1 ─ m2 (main@tip)
+	//                       └ f1 (feat-1@tip)
+	fork := rev(t, dir, "HEAD") // c0
+	gi("checkout", "-q", "-b", "feat-1")
+	gi("commit", "--allow-empty", "-m", "f1")
+	featTip := rev(t, dir, "HEAD")
+	gi("checkout", "-q", "main")
+	gi("commit", "--allow-empty", "-m", "m1")
+	gi("commit", "--allow-empty", "-m", "m2")
+	mainTip := rev(t, dir, "HEAD")
+
+	graph, err := c.LoadGraph("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Floor commit (c0) must now be contained.
+	if !graph.Contains(fork) {
+		t.Errorf("graph must contain floor commit %s (fork point)", fork)
+	}
+	// Base-above-floor commits (m1, m2) must be contained.
+	if !graph.Contains(mainTip) {
+		t.Errorf("graph must contain main tip %s", mainTip)
+	}
+	// Feature tip must be contained.
+	if !graph.Contains(featTip) {
+		t.Errorf("graph must contain feat-1 tip %s", featTip)
 	}
 }
