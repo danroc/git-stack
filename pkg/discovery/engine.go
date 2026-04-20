@@ -95,7 +95,7 @@ func (e *Engine) DiscoverStack(
 	currentBranch string,
 	chooseBranch ChooseBranchFn,
 ) ([]Branch, error) {
-	ancestors, err := e.traceAncestors(currentBranch)
+	ancestors, err := e.traceChainTo(currentBranch)
 	if err != nil {
 		return nil, err
 	}
@@ -108,27 +108,27 @@ func (e *Engine) DiscoverStack(
 	return append(ancestors, descendants...), nil
 }
 
-// traceAncestors returns the chain from base (inclusive) up to currentBranch
-// (inclusive) in bottom-to-top order. It walks the first-parent commit chain for the
-// primary trace, then falls back to stackParent config for any diverged branches the
-// graph walk missed.
-func (e *Engine) traceAncestors(currentBranch string) ([]Branch, error) {
+// traceChainTo returns the chain from baseBranch (inclusive) up to target
+// (inclusive), bottom-to-top. It walks the first-parent commit chain for the
+// primary trace, then falls back to stackParent config for any branches the
+// graph walk missed due to divergence.
+func (e *Engine) traceChainTo(target string) ([]Branch, error) {
 	baseHead, ok := e.graph.HeadOf(e.baseBranch)
 	if !ok {
 		return nil, fmt.Errorf("base branch %q not found in graph", e.baseBranch)
 	}
-	currentHead, ok := e.graph.HeadOf(currentBranch)
+	targetHead, ok := e.graph.HeadOf(target)
 	if !ok {
-		return nil, fmt.Errorf("branch %q not found in graph", currentBranch)
+		return nil, fmt.Errorf("branch %q not found in graph", target)
 	}
 
 	ancestors := []Branch{{Name: e.baseBranch, Head: baseHead}}
-	if currentBranch == e.baseBranch {
+	if target == e.baseBranch {
 		return ancestors, nil
 	}
 
 	var chain []Branch
-	for commit := currentHead; e.graph.Contains(commit) && commit != baseHead; {
+	for commit := targetHead; e.graph.Contains(commit) && commit != baseHead; {
 		if branches, ok := e.graph.BranchAt(commit); ok {
 			for _, branch := range branches {
 				chain = append(chain, Branch{Name: branch, Head: commit})
@@ -144,12 +144,12 @@ func (e *Engine) traceAncestors(currentBranch string) ([]Branch, error) {
 	ancestors = append(ancestors, chain...)
 
 	reached := ancestors[len(ancestors)-1].Name
-	if reached == currentBranch {
+	if reached == target {
 		return ancestors, nil
 	}
 
 	var fallback []Branch
-	for branch := currentBranch; branch != reached && branch != e.baseBranch && branch != ""; {
+	for branch := target; branch != reached && branch != e.baseBranch && branch != ""; {
 		head, _ := e.graph.HeadOf(branch)
 		fallback = append(fallback, Branch{Name: branch, Head: head})
 		parent, ok := e.git.GetStackParent(branch)
@@ -322,7 +322,7 @@ func (e *Engine) Parent(branch string) (string, error) {
 	if parent, ok := e.git.GetStackParent(branch); ok {
 		return parent, nil
 	}
-	ancestors, err := e.traceAncestors(branch)
+	ancestors, err := e.traceChainTo(branch)
 	if err != nil {
 		return "", err
 	}

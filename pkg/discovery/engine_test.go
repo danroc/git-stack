@@ -64,7 +64,7 @@ func branchingTestGraph() *git.Graph {
 	)
 }
 
-func TestTraceAncestors(t *testing.T) {
+func TestTraceChainTo(t *testing.T) {
 	tests := []struct {
 		name    string
 		current string
@@ -85,7 +85,7 @@ func TestTraceAncestors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := newTestEngine(t, linearTestGraph(), "main")
-			got, err := e.traceAncestors(tt.current)
+			got, err := e.traceChainTo(tt.current)
 			if err != nil {
 				t.Fatal(err)
 			}
