@@ -881,3 +881,37 @@ func TestTraceChainTo_BaseDivergence(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildTree_BaseDivergence_BootstrapWithoutConfig verifies that when base
+// has advanced past feature branches and no stackParent config is populated,
+// BuildTree still discovers the feature branches as descendants of base via
+// graph membership (the floor is the octopus merge-base of all heads, so any
+// loaded branch shares history with base).
+func TestBuildTree_BaseDivergence_BootstrapWithoutConfig(t *testing.T) {
+	// main advanced to m2; feat-1 stayed at f1 (diverged from main at c0).
+	//
+	//   c0 ─ m1 ─ m2 (main)
+	//     └ f1         (feat-1)
+	g := git.NewGraph(
+		map[string][]string{
+			"c0": {},
+			"m1": {"c0"},
+			"m2": {"m1"},
+			"f1": {"c0"},
+		},
+		map[string]string{
+			"main":   "m2",
+			"feat-1": "f1",
+		},
+	)
+	e := newTestEngine(t, g, "main")
+
+	root := e.BuildTree()
+	if len(root.Children) != 1 || root.Children[0].Branch.Name != "feat-1" {
+		names := make([]string, len(root.Children))
+		for i, c := range root.Children {
+			names[i] = c.Branch.Name
+		}
+		t.Errorf("root.Children = %v, want [feat-1]", names)
+	}
+}

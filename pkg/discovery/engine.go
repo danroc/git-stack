@@ -292,11 +292,19 @@ func (e *Engine) buildChildren(node *TreeNode) {
 	}
 }
 
-// isAbove reports whether candidateHead is strictly above parentHead in the
-// commit graph (ancestor-of, and not equal).
-func (e *Engine) isAbove(parentHead, candidateHead string) bool {
+// inSubtreeOf reports whether a candidate commit should be considered a
+// descendant of parent for the purpose of stack discovery.
+//
+// For non-base parents it is strict graph ancestry. For the base branch, any
+// in-graph commit counts: the graph floor is the octopus merge-base of all
+// branch heads, so every loaded commit shares history with base even when
+// base's tip has advanced past the candidate's fork point.
+func (e *Engine) inSubtreeOf(parent, parentHead, candidateHead string) bool {
 	if candidateHead == parentHead {
 		return false
+	}
+	if parent == e.baseBranch {
+		return e.graph.Contains(candidateHead)
 	}
 	return e.graph.IsAncestor(parentHead, candidateHead)
 }
@@ -334,7 +342,7 @@ func (e *Engine) directChildren(parent string) []string {
 		if !ok {
 			continue
 		}
-		if e.isAbove(parentHead, head) {
+		if e.inSubtreeOf(parent, parentHead, head) {
 			above[branch] = true
 		}
 	}
@@ -378,7 +386,8 @@ func (e *Engine) directChildren(parent string) []string {
 			if oHead == parentHead || oHead == cHead {
 				continue
 			}
-			if e.isAbove(parentHead, oHead) && e.graph.IsAncestor(oHead, cHead) {
+			if e.inSubtreeOf(parent, parentHead, oHead) &&
+				e.graph.IsAncestor(oHead, cHead) {
 				isDirect = false
 				break
 			}
