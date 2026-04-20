@@ -2,6 +2,7 @@ package git
 
 import (
 	"os/exec"
+	"strings"
 	"testing"
 )
 
@@ -32,7 +33,7 @@ func runGit(t *testing.T, dir string, args ...string) string {
 	if err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
-	return string(out)
+	return strings.TrimRight(string(out), "\r\n")
 }
 
 func TestMergeBaseOctopus_LinearHistory(t *testing.T) {
@@ -50,14 +51,7 @@ func TestMergeBaseOctopus_LinearHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	// main is still at c0; its head equals the merge-base.
-	if base+"\n" != c0 && base != trimNL(c0) {
-		t.Errorf("merge-base = %q, want %q", base, trimNL(c0))
+	if base != c0 {
+		t.Errorf("merge-base = %q, want %q", base, c0)
 	}
-}
-
-func trimNL(s string) string {
-	for len(s) > 0 && (s[len(s)-1] == '\n' || s[len(s)-1] == '\r') {
-		s = s[:len(s)-1]
-	}
-	return s
 }
