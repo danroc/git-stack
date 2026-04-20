@@ -298,6 +298,9 @@ func (e *Engine) isAbove(parentHead, candidateHead string) bool {
 // branch, and that choice is persisted to config.
 //
 // Every branch in the final set has its stackParent written to config.
+//
+// Precondition: parent must be a branch present in the loaded graph; passing
+// an unknown name returns an empty slice silently.
 func (e *Engine) directChildren(parent string) []string {
 	parentHead, _ := e.graph.HeadOf(parent)
 
@@ -330,6 +333,9 @@ func (e *Engine) directChildren(parent string) []string {
 		}
 		configParent, ok := e.git.GetStackParent(b)
 		if !ok {
+			continue
+		}
+		if !slices.Contains(coLocated, configParent) {
 			continue
 		}
 		if above[configParent] && configParent != b {
@@ -417,6 +423,10 @@ func (e *Engine) directChildren(parent string) []string {
 // ambiguity at the nearest branch level). Otherwise returns the owning
 // branch: the one named by candidate.stackParent if it is among the
 // co-located set, else the alphabetically-first co-located branch.
+//
+// A self-referential config (stackParent == candidate) is harmless here
+// because candidate is never in the first-parent chain being walked — the
+// walk starts from candidate's parent commit.
 func (e *Engine) coLocatedOwnerFor(candidate, candidateHead string) string {
 	configParent, hasConfig := e.git.GetStackParent(candidate)
 	for commit, ok := e.graph.FirstParent(candidateHead); ok; commit, ok = e.graph.FirstParent(commit) {

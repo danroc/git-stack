@@ -590,6 +590,46 @@ func TestDirectChildren_StaleConfigLosesToUnambiguousGraph(t *testing.T) {
 	}
 }
 
+// TestDirectChildren_Step2OnlyDemotesTrulyCoLocated ensures a branch is not
+// demoted when its stackParent config names an unrelated branch that happens
+// to be in the above-set but is not co-located.
+func TestDirectChildren_Step2OnlyDemotesTrulyCoLocated(t *testing.T) {
+	// main(c0) ← feat-1(c1)
+	//                  feat-2(c1)      (co-located with feat-1)
+	//                              ← feat-3(c2)  (unrelated, above main)
+	// feat-2.stackParent = feat-3  (bogus config — feat-3 is NOT co-located with
+	// feat-2)
+	g := git.NewGraph(
+		map[string][]string{
+			"c0": {},
+			"c1": {"c0"},
+			"c2": {"c1"},
+		},
+		map[string]string{
+			"main":   "c0",
+			"feat-1": "c1",
+			"feat-2": "c1",
+			"feat-3": "c2",
+		},
+	)
+	e := newTestEngine(t, g, "main")
+	if err := e.git.SetStackParent("feat-2", "feat-3"); err != nil {
+		t.Fatal(err)
+	}
+	// feat-2 should NOT be demoted from main's above-set: feat-3 is not
+	// a co-located sibling of feat-2.
+	children := e.directChildren("main")
+	hasFeat2 := false
+	for _, c := range children {
+		if c == "feat-2" {
+			hasFeat2 = true
+		}
+	}
+	if !hasFeat2 {
+		t.Errorf("feat-2 must remain a child of main; got %v", children)
+	}
+}
+
 // TestTraceChainTo_CoLocatedSiblingsByDefault verifies that without a config
 // hint, a co-located sibling does NOT appear in the target's chain (they are
 // siblings, not parent/child).
