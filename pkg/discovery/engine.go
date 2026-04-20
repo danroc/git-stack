@@ -348,6 +348,7 @@ func (e *Engine) IsBranchDescendant(ancestor, descendant string) bool {
 	if ancestorHead == descHead {
 		return false
 	}
+
 	// The base branch head is not loaded into the graph (it marks the boundary), so
 	// IsAncestor can't be used. Any branch with a head in the graph is a descendant of
 	// the base by definition.
