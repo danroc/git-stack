@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"os/exec"
+	"slices"
 	"testing"
 
 	"git-stack/pkg/git"
@@ -229,14 +230,12 @@ func TestDirectChildren_ConfigParentOverridesTopology(t *testing.T) {
 	}
 }
 
-// TestDirectChildren_ConfigExcludedIntermediateBlocks verifies that a branch
-// excluded from the candidate set via configParent still acts as a topological
-// intermediate and blocks candidates above it.
-func TestDirectChildren_ConfigExcludedIntermediateBlocks(t *testing.T) {
+// TestDirectChildren_GraphWinsOverStaleIntermediateConfig verifies that when a
+// topological intermediate has a stale stackParent config pointing elsewhere,
+// the graph still places it as a direct child of its real parent, and the
+// stale config is repaired.
+func TestDirectChildren_GraphWinsOverStaleIntermediateConfig(t *testing.T) {
 	// main(c0) ← feat-A(c1) ← feat-B(c2) ← feat-C(c3)
-	// feat-B's configParent points away from feat-A, so it is excluded from
-	// directChildren("feat-A")'s candidate set. But feat-B sits topologically
-	// between feat-A and feat-C, so feat-C must not be returned as a direct child.
 	g := git.NewGraph(
 		map[string][]string{
 			"c0": {},
@@ -257,8 +256,17 @@ func TestDirectChildren_ConfigExcludedIntermediateBlocks(t *testing.T) {
 	}
 
 	got := e.directChildren("feat-A")
-	if len(got) != 0 {
-		t.Errorf("directChildren(feat-A) = %v, want []", got)
+	if len(got) != 1 || got[0] != "feat-B" {
+		t.Errorf("directChildren(feat-A) = %v, want [feat-B]", got)
+	}
+	// feat-C is not a direct child of feat-A: feat-B is between.
+	if slices.Contains(got, "feat-C") {
+		t.Errorf("feat-C must not be a direct child of feat-A")
+	}
+	// Stale config on feat-B was repaired.
+	got2, ok := e.git.GetStackParent("feat-B")
+	if !ok || got2 != "feat-A" {
+		t.Errorf("feat-B stackParent = %q (ok=%v), want feat-A", got2, ok)
 	}
 }
 
@@ -303,45 +311,45 @@ func virtualStackTestGraph() *git.Graph {
 	)
 }
 
-// TestBuildTree_CoEqualBranches_VirtualStack verifies that co-equal branches
-// (feat-2a, feat-2b) do not appear as direct children of main when a
-// topological intermediate (feat-1) has a non-base config parent.
-func TestBuildTree_CoEqualBranches_VirtualStack(t *testing.T) {
-	e := newTestEngine(t, virtualStackTestGraph(), "main")
+// TestBuildTree_SiblingBranches_BothDirectChildren verifies that two branches
+// forking off main at the same commit and diverging are both direct children of
+// main, regardless of any stackParent config (graph wins).
+func TestBuildTree_SiblingBranches_BothDirectChildren(t *testing.T) {
+	// main(c0) ─┬─ feat-inter(c1)
+	//           └─ feat-1(c2)    ← feat-2a(c3)
+	//                           ← feat-2b(c3)  (co-located with feat-2a)
+	g := virtualStackTestGraph()
+	e := newTestEngine(t, g, "main")
+	// Set stale config that contradicts graph — must be overridden.
 	if err := e.git.SetStackParent("feat-1", "feat-inter"); err != nil {
 		t.Fatal(err)
 	}
 
 	root := e.BuildTree()
-
-	// main should have exactly one direct child: feat-inter.
-	if len(root.Children) != 1 || root.Children[0].Branch.Name != "feat-inter" {
-		names := make([]string, len(root.Children))
-		for i, c := range root.Children {
-			names[i] = c.Branch.Name
-		}
-		t.Fatalf("root.Children = %v, want [feat-inter]", names)
+	names := make([]string, len(root.Children))
+	for i, c := range root.Children {
+		names[i] = c.Branch.Name
 	}
-
-	featInter := root.Children[0]
-	if len(featInter.Children) != 1 || featInter.Children[0].Branch.Name != "feat-1" {
-		t.Fatalf("feat-inter.Children = %v, want [feat-1]", featInter.Children)
+	want := []string{"feat-1", "feat-inter"}
+	if len(names) != len(want) {
+		t.Fatalf("root.Children = %v, want %v", names, want)
 	}
-
-	feat1 := featInter.Children[0]
-	if len(feat1.Children) != 2 {
-		t.Fatalf(
-			"feat-1 has %d children, want 2: %v",
-			len(feat1.Children),
-			feat1.Children,
-		)
-	}
-	names := []string{feat1.Children[0].Branch.Name, feat1.Children[1].Branch.Name}
-	want := []string{"feat-2a", "feat-2b"}
+	slices.Sort(names)
 	for i, w := range want {
 		if names[i] != w {
-			t.Errorf("feat-1.Children[%d] = %q, want %q", i, names[i], w)
+			t.Errorf("[%d] = %q, want %q", i, names[i], w)
 		}
+	}
+
+	// feat-1 still has feat-2a and feat-2b as children.
+	var feat1 *TreeNode
+	for _, c := range root.Children {
+		if c.Branch.Name == "feat-1" {
+			feat1 = c
+		}
+	}
+	if feat1 == nil || len(feat1.Children) != 2 {
+		t.Fatalf("feat-1 must have 2 children, got %v", feat1)
 	}
 }
 
