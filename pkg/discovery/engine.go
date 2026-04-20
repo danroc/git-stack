@@ -335,7 +335,7 @@ func (e *Engine) directChildren(parent string) []string {
 	above = e.filterCoLocated(above)
 	direct := e.filterGraphDirect(above, parent, parentHead)
 	direct = e.filterCoLocatedAbove(direct, parent, parentHead)
-	direct = e.recoverDiverged(direct, parent, parentHead)
+	direct = e.recoverDiverged(direct, parent)
 
 	result := slices.Sorted(maps.Keys(direct))
 
@@ -490,7 +490,6 @@ func (e *Engine) filterCoLocatedAbove(
 func (e *Engine) recoverDiverged(
 	direct map[string]bool,
 	parent string,
-	parentHead string,
 ) map[string]bool {
 	for _, branch := range e.graph.Branches() {
 		if direct[branch] || branch == parent || branch == e.baseBranch {
