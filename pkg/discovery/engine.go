@@ -449,20 +449,19 @@ func (e *Engine) coLocatedOwnerFor(candidate, candidateHead string) string {
 	return ""
 }
 
-// Parent returns the immediate stack parent of branch. It first checks git config; if
-// unset it falls back to graph ancestry.
+// Parent returns the immediate stack parent of branch by walking the full chain
+// from base to branch via traceChainTo. Under graph-first semantics, this is
+// the correct way to resolve the parent: the graph walk plus config recovery
+// handles divergence and co-location ambiguities uniformly.
 func (e *Engine) Parent(branch string) (string, error) {
-	if parent, ok := e.git.GetStackParent(branch); ok {
-		return parent, nil
-	}
-	ancestors, err := e.traceChainTo(branch)
+	chain, err := e.traceChainTo(branch)
 	if err != nil {
 		return "", err
 	}
-	if len(ancestors) < 2 {
+	if len(chain) < 2 {
 		return "", fmt.Errorf("branch %q has no parent in the stack", branch)
 	}
-	return ancestors[len(ancestors)-2].Name, nil
+	return chain[len(chain)-2].Name, nil
 }
 
 // IsBranchDescendant reports whether descendant's head is reachable from
