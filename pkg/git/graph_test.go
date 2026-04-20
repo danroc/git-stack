@@ -122,7 +122,7 @@ func TestGraph_FirstParent(t *testing.T) {
 	}{
 		{"c2", "c1", true},
 		{"c1", "c0", true},
-		{"c0", "", false}, // not in graph
+		{"c0", "", false}, // root commit — in graph but has no parents
 	}
 	for _, tt := range tests {
 		t.Run(tt.hash, func(t *testing.T) {

@@ -118,8 +118,8 @@ func NewGraph(parents map[string][]string, heads map[string]string) *Graph {
 	return &Graph{parents: parents, heads: heads, branchAt: branchAt}
 }
 
-// Contains reports whether hash is in the loaded graph. Commits below the base branch
-// boundary are not loaded, so Contains returns false for them.
+// Contains reports whether hash is in the loaded graph (at or above the floor
+// commit — the octopus merge-base of all branch heads).
 func (g *Graph) Contains(hash string) bool {
 	_, ok := g.parents[hash]
 	return ok

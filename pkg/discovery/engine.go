@@ -332,8 +332,9 @@ func (e *Engine) Parent(branch string) (string, error) {
 	return ancestors[len(ancestors)-2].Name, nil
 }
 
-// IsBranchDescendant reports whether descendant is strictly above ancestor in
-// the commit graph.
+// IsBranchDescendant reports whether descendant's head is reachable from
+// ancestor's head in the commit graph (i.e. descendant is a commit-graph
+// descendant of ancestor).
 func (e *Engine) IsBranchDescendant(ancestor, descendant string) bool {
 	ancestorHead, ok := e.graph.HeadOf(ancestor)
 	if !ok {
