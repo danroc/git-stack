@@ -2,6 +2,7 @@ package git
 
 import (
 	"bufio"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -13,20 +14,18 @@ import (
 type Graph struct {
 	parents  map[string][]string // commit_hash → parent_hashes
 	heads    map[string]string   // branch_name → commit_hash
-	branchAt map[string]string   // commit_hash → branch_name
+	branchAt map[string][]string // commit_hash → branch_names (sorted)
 }
 
-// LoadGraph builds the commit graph for all local branches relative to baseBranch. It
-// issues exactly two git commands:
-//
-// 1. git for-each-ref to collect all branch heads.
-// 2. git log to load the commit DAG between those heads and baseBranch.
-func (g *Client) LoadGraph(baseBranch string) (*Graph, error) {
+// LoadGraph builds the commit graph for all local branches. The graph floor is
+// the octopus merge-base of every branch head — commits at and above the floor
+// are loaded.
+func (g *Client) LoadGraph() (*Graph, error) {
 	heads, err := g.listBranchHeads()
 	if err != nil {
 		return nil, err
 	}
-	return g.buildGraph(baseBranch, heads)
+	return g.buildGraph(heads)
 }
 
 func (g *Client) listBranchHeads() (map[string]string, error) {
@@ -52,29 +51,43 @@ func (g *Client) listBranchHeads() (map[string]string, error) {
 	return heads, nil
 }
 
-func (g *Client) buildGraph(
-	baseBranch string,
-	heads map[string]string,
-) (*Graph, error) {
+func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 	graph := &Graph{
 		parents:  make(map[string][]string),
 		heads:    heads,
-		branchAt: make(map[string]string),
+		branchAt: make(map[string][]string),
 	}
 	if len(heads) == 0 {
 		return graph, nil
 	}
 
 	for branch, hash := range heads {
-		graph.branchAt[hash] = branch
+		graph.branchAt[hash] = append(graph.branchAt[hash], branch)
+	}
+	for _, names := range graph.branchAt {
+		slices.Sort(names)
 	}
 
-	// This produces commit hashes along with their parent hashes, for all commits
-	// reachable from any branch head but not from baseBranch.
-	hashes := slices.Sorted(maps.Values(heads))
+	// Compute the floor: the merge-base of every branch head (including the base
+	// branch). Commits at and above the floor are loaded into the graph.
+	refs := slices.Sorted(maps.Values(heads))
+	floor, err := g.MergeBaseOctopus(refs...)
+	if err != nil {
+		return nil, fmt.Errorf("computing graph floor: %w", err)
+	}
+
+	// Determine whether the floor has a parent to anchor ^<floor>^. A root commit
+	// has no parents, in which case we drop the exclusion.
+	hasParent, err := g.commitHasParent(floor)
+	if err != nil {
+		return nil, fmt.Errorf("inspecting floor parent: %w", err)
+	}
+
 	args := []string{"log", "--format=%H %P"}
-	args = append(args, hashes...)
-	args = append(args, "^"+baseBranch)
+	args = append(args, refs...)
+	if hasParent {
+		args = append(args, "^"+floor+"^")
+	}
 
 	out, err := g.run(args...)
 	if err != nil {
@@ -92,17 +105,21 @@ func (g *Client) buildGraph(
 	return graph, nil
 }
 
-// NewGraph constructs a Graph from raw commit data.
+// NewGraph constructs a Graph from raw commit data. When two branches share a
+// HEAD, both are retained in branchAt at that commit, sorted alphabetically.
 func NewGraph(parents map[string][]string, heads map[string]string) *Graph {
-	branchAt := make(map[string]string, len(heads))
+	branchAt := make(map[string][]string, len(heads))
 	for branch, hash := range heads {
-		branchAt[hash] = branch
+		branchAt[hash] = append(branchAt[hash], branch)
+	}
+	for _, names := range branchAt {
+		slices.Sort(names)
 	}
 	return &Graph{parents: parents, heads: heads, branchAt: branchAt}
 }
 
-// Contains reports whether hash is in the loaded graph. Commits below the base branch
-// boundary are not loaded, so Contains returns false for them.
+// Contains reports whether hash is in the loaded graph (at or above the floor
+// commit — the octopus merge-base of all branch heads).
 func (g *Graph) Contains(hash string) bool {
 	_, ok := g.parents[hash]
 	return ok
@@ -114,11 +131,15 @@ func (g *Graph) HeadOf(branch string) (string, bool) {
 	return h, ok
 }
 
-// BranchAt returns the branch whose HEAD is hash. When two branches share the same
-// HEAD, one is returned non-deterministically.
-func (g *Graph) BranchAt(hash string) (string, bool) {
-	b, ok := g.branchAt[hash]
-	return b, ok
+// BranchAt returns all branches whose HEAD is at hash, sorted alphabetically.
+// Returns (nil, false) when no branch points at hash. The returned slice is a
+// copy; callers may modify it freely.
+func (g *Graph) BranchAt(hash string) ([]string, bool) {
+	branches, ok := g.branchAt[hash]
+	if !ok {
+		return nil, false
+	}
+	return slices.Clone(branches), true
 }
 
 // Branches returns all local branch names known to the graph, sorted alphabetically.

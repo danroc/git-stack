@@ -22,6 +22,9 @@ func NewClient(dir string) *Client {
 	return &Client{dir: dir}
 }
 
+// Dir returns the working directory this client operates in.
+func (g *Client) Dir() string { return g.dir }
+
 // Error is returned when a git subprocess exits with a non-zero status.
 type Error struct {
 	Args   []string
@@ -252,4 +255,25 @@ func (g *Client) CommitsAhead(parent, branch string) (int, error) {
 		return 0, fmt.Errorf("parsing commit count %q: %w", out, err)
 	}
 	return n, nil
+}
+
+// MergeBaseOctopus returns the best common ancestor of two or more refs, using
+// the octopus algorithm (same semantics as `git merge-base --octopus`). Returns
+// an error if any two refs have disjoint histories.
+func (g *Client) MergeBaseOctopus(refs ...string) (string, error) {
+	if len(refs) == 0 {
+		return "", fmt.Errorf("MergeBaseOctopus: no refs provided")
+	}
+	args := append([]string{"merge-base", "--octopus"}, refs...)
+	return g.run(args...)
+}
+
+// commitHasParent reports whether hash has at least one parent commit.
+func (g *Client) commitHasParent(hash string) (bool, error) {
+	out, err := g.run("rev-list", "--parents", "-n", "1", hash)
+	if err != nil {
+		return false, err
+	}
+	// Output is "<hash> <parent> [<parent>...]" or "<hash>" for a root commit.
+	return len(strings.Fields(out)) > 1, nil
 }
