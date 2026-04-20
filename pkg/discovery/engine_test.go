@@ -311,16 +311,18 @@ func virtualStackTestGraph() *git.Graph {
 	)
 }
 
-// TestBuildTree_SiblingBranches_BothDirectChildren verifies that two branches
-// forking off main at the same commit and diverging are both direct children of
-// main, regardless of any stackParent config (graph wins).
-func TestBuildTree_SiblingBranches_BothDirectChildren(t *testing.T) {
+// TestBuildTree_SiblingBranches_ConfigWinsDivergence verifies that when two branches
+// fork off main at the same commit and one's stackParent config names the other, the
+// config expresses a divergence claim and wins: the child is placed under its config
+// parent, not directly under main.
+func TestBuildTree_SiblingBranches_ConfigWinsDivergence(t *testing.T) {
 	// main(c0) ─┬─ feat-inter(c1)
 	//           └─ feat-1(c2)    ← feat-2a(c3)
 	//                           ← feat-2b(c3)  (co-located with feat-2a)
 	g := virtualStackTestGraph()
 	e := newTestEngine(t, g, "main")
-	// Set stale config that contradicts graph — must be overridden.
+	// Set config expressing divergence: feat-1 was originally a child of
+	// feat-inter, then feat-inter moved past it. Config should win.
 	if err := e.git.SetStackParent("feat-1", "feat-inter"); err != nil {
 		t.Fatal(err)
 	}
@@ -330,26 +332,24 @@ func TestBuildTree_SiblingBranches_BothDirectChildren(t *testing.T) {
 	for i, c := range root.Children {
 		names[i] = c.Branch.Name
 	}
-	want := []string{"feat-1", "feat-inter"}
+	want := []string{"feat-inter"}
 	if len(names) != len(want) {
 		t.Fatalf("root.Children = %v, want %v", names, want)
 	}
-	slices.Sort(names)
-	for i, w := range want {
-		if names[i] != w {
-			t.Errorf("[%d] = %q, want %q", i, names[i], w)
-		}
+	if names[0] != want[0] {
+		t.Errorf("[%d] = %q, want %q", 0, names[0], want[0])
+	}
+
+	// feat-1 is under feat-inter via divergence config.
+	featInter := root.Children[0]
+	if len(featInter.Children) != 1 || featInter.Children[0].Branch.Name != "feat-1" {
+		t.Fatalf("feat-inter must have 1 child (feat-1), got %v", featInter.Children)
 	}
 
 	// feat-1 still has feat-2a and feat-2b as children.
-	var feat1 *TreeNode
-	for _, c := range root.Children {
-		if c.Branch.Name == "feat-1" {
-			feat1 = c
-		}
-	}
-	if feat1 == nil || len(feat1.Children) != 2 {
-		t.Fatalf("feat-1 must have 2 children, got %v", feat1)
+	feat1 := featInter.Children[0]
+	if len(feat1.Children) != 2 {
+		t.Fatalf("feat-1 must have 2 children, got %v", feat1.Children)
 	}
 }
 

@@ -348,6 +348,27 @@ func (e *Engine) directChildren(parent string) []string {
 		}
 	}
 
+	// Step 1.5 — sibling config filter.
+	//
+	// If a branch in the graph-above set has a config parent that's also in the
+	// graph-above set (a sibling), remove it from this parent's direct children only
+	// when the branch is genuinely diverged from its config parent (neither is ancestor
+	// of the other). If the branch IS above its config parent in the graph, the config
+	// claim is a graph claim — don't interfere. If the config parent is above the
+	// branch, the config is invalid — don't interfere.
+	for b := range above {
+		if configParent, ok := e.git.GetStackParent(b); ok {
+			if configParent != parent && above[configParent] {
+				bHead, _ := e.graph.HeadOf(b)
+				configHead, _ := e.graph.HeadOf(configParent)
+				if !e.graph.IsAncestor(configHead, bHead) &&
+					!e.graph.IsAncestor(bHead, configHead) {
+					delete(above, b)
+				}
+			}
+		}
+	}
+
 	// Step 2 — co-location handling among branches already in the set.
 	//
 	// If X and Y share a HEAD and one's stackParent names the other, demote the
@@ -420,12 +441,14 @@ func (e *Engine) directChildren(parent string) []string {
 	// Step 4 — divergence recovery.
 	//
 	// Branches whose stackParent config names parent but that aren't in the direct set.
+	// Only claim if the branch has no branch ancestor in the graph — branches with
+	// branch ancestors are already claimed by the graph structure.
 	for _, branch := range e.graph.Branches() {
 		if direct[branch] || branch == parent || branch == e.baseBranch {
 			continue
 		}
 		configParent, ok := e.git.GetStackParent(branch)
-		if ok && configParent == parent {
+		if ok && configParent == parent && !e.hasBranchAncestor(branch) {
 			direct[branch] = true
 		}
 	}
@@ -438,7 +461,21 @@ func (e *Engine) directChildren(parent string) []string {
 	slices.Sort(result)
 
 	// Step 5 — persist (always-write).
+	//
+	// Don't overwrite config if the child already has a config parent that's a sibling
+	// (another direct child of the same top-level parent). This preserves divergence
+	// config: when a parent moves past a child, the child's config parent is the
+	// original parent, and we shouldn't claim it as our own.
 	for _, child := range result {
+		if existingParent, ok := e.git.GetStackParent(
+			child,
+		); ok && existingParent != parent {
+			if existingParentHead, exists := e.graph.HeadOf(existingParent); exists {
+				if e.inSubtreeOf(parent, parentHead, existingParentHead) {
+					continue
+				}
+			}
+		}
 		e.persistParent(child, parent)
 	}
 
@@ -460,7 +497,9 @@ func (e *Engine) directChildren(parent string) []string {
 // candidate's parent commit.
 func (e *Engine) coLocatedOwnerFor(candidate, candidateHead string) string {
 	configParent, hasConfig := e.git.GetStackParent(candidate)
-	for commit, ok := e.graph.FirstParent(candidateHead); ok; commit, ok = e.graph.FirstParent(commit) {
+	for commit, ok := e.graph.FirstParent(
+		candidateHead,
+	); ok; commit, ok = e.graph.FirstParent(commit) {
 		branches, haveBranches := e.graph.BranchAt(commit)
 		if !haveBranches {
 			continue
@@ -586,4 +625,36 @@ func collectSubtreeMembers(node *TreeNode, parent string, result *[]BranchWithPa
 // silently swallowed: config is a hint, never a hard dependency.
 func (e *Engine) persistParent(child, parent string) {
 	_ = e.git.SetStackParent(child, parent)
+}
+
+// hasBranchAncestor reports whether branch has any branch (other than baseBranch) as an
+// ancestor in the commit graph. This is used to distinguish branches that are genuinely
+// diverged (only baseBranch as ancestor) from those already claimed by the graph
+// structure.
+//
+// Co-located branches (multiple branches at the same HEAD) are excluded from this check
+// — their parent resolution is handled by the co-location logic in Steps 2 and 3.5 of
+// directChildren, so config claims for co-located branches are valid.
+func (e *Engine) hasBranchAncestor(branch string) bool {
+	branchHead, ok := e.graph.HeadOf(branch)
+	if !ok {
+		return false
+	}
+	// Co-located branches: their parent is resolved by co-location logic (Steps 2/3.5),
+	// not by graph ancestry. Don't block config claims for them.
+	if branches, ok := e.graph.BranchAt(branchHead); ok && len(branches) >= 2 {
+		return false
+	}
+	for commit, ok := e.graph.FirstParent(
+		branchHead,
+	); ok; commit, ok = e.graph.FirstParent(commit) {
+		if branches, haveBranches := e.graph.BranchAt(commit); haveBranches {
+			for _, b := range branches {
+				if b != branch && b != e.baseBranch {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
