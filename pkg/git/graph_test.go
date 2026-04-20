@@ -8,7 +8,9 @@ import (
 )
 
 // linearGraph: main(c0) ← feat-1(c1) ← feat-2(c2)
-// c0 is NOT in parents, simulating the base-branch boundary.
+// c0 is NOT in parents, simulating a commit below the in-memory graph floor:
+// useful for testing that Contains/IsAncestor correctly treat out-of-range
+// commits as not loaded.
 func linearGraph() *Graph {
 	return &Graph{
 		parents: map[string][]string{
@@ -247,7 +249,7 @@ func TestLoadGraph_IncludesBaseDownToFloor(t *testing.T) {
 	gi("commit", "--allow-empty", "-m", "m2")
 	mainTip := rev(t, dir, "HEAD")
 
-	graph, err := c.LoadGraph("main")
+	graph, err := c.LoadGraph()
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -20,10 +20,7 @@ type Graph struct {
 // LoadGraph builds the commit graph for all local branches. The graph floor is
 // the octopus merge-base of every branch head — commits at and above the floor
 // are loaded.
-//
-// The baseBranch parameter is currently unused but retained for API stability;
-// it may be re-introduced when discovery logic needs an explicit base reference.
-func (g *Client) LoadGraph(_ string) (*Graph, error) {
+func (g *Client) LoadGraph() (*Graph, error) {
 	heads, err := g.listBranchHeads()
 	if err != nil {
 		return nil, err

@@ -35,7 +35,7 @@ func NewEngine(
 	g *git.Client,
 	baseBranch string,
 ) (*Engine, error) {
-	graph, err := g.LoadGraph(baseBranch)
+	graph, err := g.LoadGraph()
 	if err != nil {
 		return nil, fmt.Errorf("loading commit graph: %w", err)
 	}
