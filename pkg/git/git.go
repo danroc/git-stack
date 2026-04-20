@@ -253,3 +253,14 @@ func (g *Client) CommitsAhead(parent, branch string) (int, error) {
 	}
 	return n, nil
 }
+
+// MergeBaseOctopus returns the best common ancestor of two or more refs, using
+// the octopus algorithm (same semantics as `git merge-base --octopus`). Returns
+// an error if any two refs have disjoint histories.
+func (g *Client) MergeBaseOctopus(refs ...string) (string, error) {
+	if len(refs) == 0 {
+		return "", fmt.Errorf("MergeBaseOctopus: no refs provided")
+	}
+	args := append([]string{"merge-base", "--octopus"}, refs...)
+	return g.run(args...)
+}
