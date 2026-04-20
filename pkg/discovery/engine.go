@@ -3,6 +3,7 @@ package discovery
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 
 	"git-stack/pkg/git"
@@ -146,9 +147,8 @@ func (e *Engine) traceChainTo(target string) ([]Branch, error) {
 	for commit := targetHead; e.graph.Contains(commit); {
 		if branches, ok := e.graph.BranchAt(commit); ok {
 			if commit == targetHead {
-				// At the target commit: add target first (top of local pair), then the
-				// configured co-located parent (one level below). All other co-located
-				// names are siblings and are skipped.
+				// Target first, then its configured co-located parent — reversed to
+				// bottom-to-top order after. Skip other co-located siblings.
 				chain = append(chain, Branch{Name: target, Head: commit})
 				if targetConfigParent != "" {
 					for _, name := range branches {
@@ -158,7 +158,6 @@ func (e *Engine) traceChainTo(target string) ([]Branch, error) {
 					}
 				}
 			} else {
-				// Below target's head: include all branches at this commit.
 				for _, name := range branches {
 					chain = append(chain, Branch{Name: name, Head: commit})
 				}
@@ -171,12 +170,10 @@ func (e *Engine) traceChainTo(target string) ([]Branch, error) {
 		commit = parent
 	}
 
-	// chain is top-to-bottom; reverse to bottom-to-top.
 	slices.Reverse(chain)
 
-	// Diverged-parent insertion: if target has a configured stack parent that is not
-	// already in the chain (it has advanced past target's commit), insert it just below
-	// target so the full configured ancestry is reflected.
+	// If target has a configured stack parent not already in the chain (it has advanced
+	// past target's commit), insert it just below target.
 	if targetConfigParent != "" {
 		inChain := false
 		for _, b := range chain {
@@ -187,10 +184,11 @@ func (e *Engine) traceChainTo(target string) ([]Branch, error) {
 		}
 		if !inChain {
 			parentHead, _ := e.graph.HeadOf(targetConfigParent)
-			inserted := Branch{Name: targetConfigParent, Head: parentHead}
-			// Insert at len(chain)-1 (just before target, which is the last element).
-			chain = append(chain[:len(chain)-1],
-				append([]Branch{inserted}, chain[len(chain)-1:]...)...)
+			chain = slices.Insert(
+				chain,
+				len(chain)-1,
+				Branch{Name: targetConfigParent, Head: parentHead},
+			)
 		}
 	}
 
@@ -221,8 +219,7 @@ func (e *Engine) traceChainTo(target string) ([]Branch, error) {
 }
 
 // recoverViaConfig walks branch's stackParent config chain upward until it reaches the
-// base branch or can go no further. Returned slice is bottom-to-top and excludes branch
-// itself.
+// base branch or cycles are detected. Returns bottom-to-top slice excluding branch.
 func (e *Engine) recoverViaConfig(branch string) []Branch {
 	var chain []Branch
 	seen := map[string]bool{branch: true}
@@ -333,7 +330,22 @@ func (e *Engine) inSubtreeOf(parent, parentHead, candidateHead string) bool {
 func (e *Engine) directChildren(parent string) []string {
 	parentHead, _ := e.graph.HeadOf(parent)
 
-	// Step 1 — graph-above set.
+	above := e.graphAboveSet(parent, parentHead)
+	above = e.filterSiblingConfig(above, parent)
+	above = e.filterCoLocated(above)
+	direct := e.filterGraphDirect(above, parent, parentHead)
+	direct = e.filterCoLocatedAbove(direct, parent, parentHead)
+	direct = e.recoverDiverged(direct, parent, parentHead)
+
+	result := slices.Sorted(maps.Keys(direct))
+
+	e.persistChildren(result, parent, parentHead)
+
+	return result
+}
+
+// graphAboveSet returns branches strictly above parent in the graph.
+func (e *Engine) graphAboveSet(parent, parentHead string) map[string]bool {
 	above := make(map[string]bool)
 	for _, branch := range e.graph.Branches() {
 		if branch == parent || branch == e.baseBranch {
@@ -347,55 +359,77 @@ func (e *Engine) directChildren(parent string) []string {
 			above[branch] = true
 		}
 	}
+	return above
+}
 
-	// Step 1.5 — sibling config filter.
-	//
-	// If a branch in the graph-above set has a config parent that's also in the
-	// graph-above set (a sibling), remove it from this parent's direct children only
-	// when the branch is genuinely diverged from its config parent (neither is ancestor
-	// of the other). If the branch IS above its config parent in the graph, the config
-	// claim is a graph claim — don't interfere. If the config parent is above the
-	// branch, the config is invalid — don't interfere.
+// filterSiblingConfig removes branches whose config parent is a sibling in the
+// above-set and the branch is genuinely diverged from that sibling.
+//
+// When a parent advances past a child (e.g., A is pushed while B was its child),
+// B's config parent remains A but the graph no longer shows B above A. Without
+// this filter, main would claim both A and B as children, corrupting the stack.
+func (e *Engine) filterSiblingConfig(
+	above map[string]bool,
+	parent string,
+) map[string]bool {
+	result := make(map[string]bool)
 	for b := range above {
 		if configParent, ok := e.git.GetStackParent(b); ok {
 			if configParent != parent && above[configParent] {
 				bHead, _ := e.graph.HeadOf(b)
 				configHead, _ := e.graph.HeadOf(configParent)
-				if !e.graph.IsAncestor(configHead, bHead) &&
-					!e.graph.IsAncestor(bHead, configHead) {
-					delete(above, b)
+				if e.graph.IsAncestor(configHead, bHead) ||
+					e.graph.IsAncestor(bHead, configHead) {
+					result[b] = true
+					continue
 				}
+				continue
 			}
 		}
+		result[b] = true
 	}
+	return result
+}
 
-	// Step 2 — co-location handling among branches already in the set.
-	//
-	// If X and Y share a HEAD and one's stackParent names the other, demote the
-	// configured-child.
+// filterCoLocated demotes branches whose stackParent config names a co-located
+// sibling in the above-set.
+//
+// When two branches share a HEAD and one declares the other as its parent, the
+// declared child should not be a direct child of the shared parent — it belongs
+// under its config parent.
+func (e *Engine) filterCoLocated(above map[string]bool) map[string]bool {
+	result := make(map[string]bool)
 	for b := range above {
 		bHead, _ := e.graph.HeadOf(b)
 		coLocated, _ := e.graph.BranchAt(bHead)
 		if len(coLocated) < 2 {
+			result[b] = true
 			continue
 		}
 		configParent, ok := e.git.GetStackParent(b)
 		if !ok {
+			result[b] = true
 			continue
 		}
 		if !slices.Contains(coLocated, configParent) {
+			result[b] = true
 			continue
 		}
 		if above[configParent] && configParent != b {
-			delete(above, b)
+			continue
 		}
+		result[b] = true
 	}
+	return result
+}
 
-	// Step 3 — graph-direct filter.
-	//
-	// Drop C if some D sits strictly between parent and C. Intermediates are checked
-	// against every branch, not just members of `above`, so a non-candidate still
-	// blocks.
+// filterGraphDirect drops candidates where another branch sits strictly between
+// parent and the candidate.
+func (e *Engine) filterGraphDirect(
+	above map[string]bool,
+	parent string,
+	parentHead string,
+) map[string]bool {
 	direct := make(map[string]bool)
 	for candidate := range above {
 		cHead, _ := e.graph.HeadOf(candidate)
@@ -418,31 +452,46 @@ func (e *Engine) directChildren(parent string) []string {
 			direct[candidate] = true
 		}
 	}
+	return direct
+}
 
-	// Step 3.5 — "child above co-located pair" edge case.
-	//
-	// If candidate C's first-parent chain lands on a commit shared by multiple
-	// branches, C would be reported as a direct child of each of them. Assign C to its
-	// configured parent if named; otherwise to the alphabetically- first co-located
-	// branch (and ensure C is a direct child only of the owner).
+// filterCoLocatedAbove removes candidates whose co-located owner is not the
+// current parent.
+//
+// When a candidate sits above multiple branches sharing the same HEAD, only the
+// owner (determined by config or alphabetical order) should claim it.
+func (e *Engine) filterCoLocatedAbove(
+	direct map[string]bool,
+	parent string,
+	parentHead string,
+) map[string]bool {
+	result := make(map[string]bool)
 	for candidate := range direct {
 		cHead, _ := e.graph.HeadOf(candidate)
 		owner := e.coLocatedOwnerFor(candidate, cHead)
 		if owner != "" && owner != parent {
 			ownerHead, _ := e.graph.HeadOf(owner)
 			if parentHead == ownerHead {
-				// `parent` and `owner` share a commit; only `owner` should claim this
-				// candidate.
-				delete(direct, candidate)
+				continue
 			}
 		}
+		result[candidate] = true
 	}
+	return result
+}
 
-	// Step 4 — divergence recovery.
-	//
-	// Branches whose stackParent config names parent but that aren't in the direct set.
-	// Only claim if the branch has no branch ancestor in the graph — branches with
-	// branch ancestors are already claimed by the graph structure.
+// recoverDiverged adds branches whose stackParent config names parent but that
+// are not in the direct set and have no branch ancestor in the graph.
+//
+// This handles the case where a parent advances past a child. The child's config
+// parent remains the original parent, but the graph no longer shows the child
+// above it. We claim it via config only when the child is genuinely diverged
+// (no other branch sits between it and base).
+func (e *Engine) recoverDiverged(
+	direct map[string]bool,
+	parent string,
+	parentHead string,
+) map[string]bool {
 	for _, branch := range e.graph.Branches() {
 		if direct[branch] || branch == parent || branch == e.baseBranch {
 			continue
@@ -452,24 +501,21 @@ func (e *Engine) directChildren(parent string) []string {
 			direct[branch] = true
 		}
 	}
+	return direct
+}
 
-	// Finalize and sort.
-	result := make([]string, 0, len(direct))
-	for b := range direct {
-		result = append(result, b)
-	}
-	slices.Sort(result)
-
-	// Step 5 — persist (always-write).
-	//
-	// Don't overwrite config if the child already has a config parent that's a sibling
-	// (another direct child of the same top-level parent). This preserves divergence
-	// config: when a parent moves past a child, the child's config parent is the
-	// original parent, and we shouldn't claim it as our own.
-	for _, child := range result {
+// persistChildren writes stackParent config for each child, skipping branches
+// whose config points to a diverged sibling.
+//
+// When a parent advances past a child, the child's config parent is the original
+// parent. Overwriting it would corrupt the divergence claim and cause the child
+// to appear under the wrong parent in subsequent view calls.
+func (e *Engine) persistChildren(children []string, parent, parentHead string) {
+	for _, child := range children {
 		if existingParent, ok := e.git.GetStackParent(
 			child,
-		); ok && existingParent != parent {
+		); ok &&
+			existingParent != parent {
 			if existingParentHead, exists := e.graph.HeadOf(existingParent); exists {
 				if e.inSubtreeOf(parent, parentHead, existingParentHead) {
 					continue
@@ -478,8 +524,6 @@ func (e *Engine) directChildren(parent string) []string {
 		}
 		e.persistParent(child, parent)
 	}
-
-	return result
 }
 
 // coLocatedOwnerFor determines which co-located branch (if any) "owns" candidate when
@@ -628,20 +672,15 @@ func (e *Engine) persistParent(child, parent string) {
 }
 
 // hasBranchAncestor reports whether branch has any branch (other than baseBranch) as an
-// ancestor in the commit graph. This is used to distinguish branches that are genuinely
-// diverged (only baseBranch as ancestor) from those already claimed by the graph
-// structure.
+// ancestor in the commit graph.
 //
-// Co-located branches (multiple branches at the same HEAD) are excluded from this check
-// — their parent resolution is handled by the co-location logic in Steps 2 and 3.5 of
-// directChildren, so config claims for co-located branches are valid.
+// Co-located branches (multiple branches at the same HEAD) are excluded — their parent
+// resolution is handled by co-location logic, so config claims for them are valid.
 func (e *Engine) hasBranchAncestor(branch string) bool {
 	branchHead, ok := e.graph.HeadOf(branch)
 	if !ok {
 		return false
 	}
-	// Co-located branches: their parent is resolved by co-location logic (Steps 2/3.5),
-	// not by graph ancestry. Don't block config claims for them.
 	if branches, ok := e.graph.BranchAt(branchHead); ok && len(branches) >= 2 {
 		return false
 	}
