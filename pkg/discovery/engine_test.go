@@ -528,3 +528,74 @@ func TestSubtreeMembers_Empty(t *testing.T) {
 		t.Errorf("got %d members, want 0", len(members))
 	}
 }
+
+// TestTraceChainTo_CoLocatedConfiguredSibling verifies that when two branches
+// share a HEAD and config says one is the stack parent of the other, the
+// configured parent appears in the traced chain immediately below the target.
+func TestTraceChainTo_CoLocatedConfiguredSibling(t *testing.T) {
+	// main(c0) ← feat-1(c1)
+	//                  feat-2(c1)  // same commit as feat-1
+	g := git.NewGraph(
+		map[string][]string{"c0": {}, "c1": {"c0"}},
+		map[string]string{
+			"main":   "c0",
+			"feat-1": "c1",
+			"feat-2": "c1",
+		},
+	)
+	e := newTestEngine(t, g, "main")
+	if err := e.git.SetStackParent("feat-2", "feat-1"); err != nil {
+		t.Fatal(err)
+	}
+
+	chain, err := e.traceChainTo("feat-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make([]string, len(chain))
+	for i, b := range chain {
+		got[i] = b.Name
+	}
+	want := []string{"main", "feat-1", "feat-2"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i, w := range want {
+		if got[i] != w {
+			t.Errorf("[%d] = %q, want %q", i, got[i], w)
+		}
+	}
+}
+
+// TestTraceChainTo_CoLocatedSiblingsByDefault verifies that without a config
+// hint, a co-located sibling does NOT appear in the target's chain (they are
+// siblings, not parent/child).
+func TestTraceChainTo_CoLocatedSiblingsByDefault(t *testing.T) {
+	g := git.NewGraph(
+		map[string][]string{"c0": {}, "c1": {"c0"}},
+		map[string]string{
+			"main":   "c0",
+			"feat-1": "c1",
+			"feat-2": "c1",
+		},
+	)
+	e := newTestEngine(t, g, "main")
+
+	chain, err := e.traceChainTo("feat-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range chain {
+		if b.Name == "feat-1" {
+			t.Errorf("feat-1 should not appear in feat-2's chain (siblings)")
+		}
+	}
+	// The chain should be [main, feat-2].
+	if len(chain) != 2 || chain[0].Name != "main" || chain[1].Name != "feat-2" {
+		names := make([]string, len(chain))
+		for i, b := range chain {
+			names[i] = b.Name
+		}
+		t.Errorf("got %v, want [main feat-2]", names)
+	}
+}

@@ -109,9 +109,21 @@ func (e *Engine) DiscoverStack(
 }
 
 // traceChainTo returns the chain from baseBranch (inclusive) up to target
-// (inclusive), bottom-to-top. It walks the first-parent commit chain for the
-// primary trace, then falls back to stackParent config for any branches the
-// graph walk missed due to divergence.
+// (inclusive), bottom-to-top.
+//
+// The graph is the primary source of truth: the first-parent chain is walked
+// from target downward, and at each commit we enumerate every branch pinned
+// there. target itself is always included; co-located siblings of target are
+// included only when target.stackParent names them (otherwise they are
+// considered siblings, not ancestors). Branches encountered strictly below
+// target's head are included unconditionally — they lie on target's chain.
+//
+// When the graph walk cannot reach baseBranch (base has diverged, or an
+// intermediate branch has diverged so the walk stops early), the chain is
+// completed by following each missing branch's stackParent config upward.
+//
+// Every adjacent (child, parent) pair in the final chain is persisted via
+// persistParent.
 func (e *Engine) traceChainTo(target string) ([]Branch, error) {
 	baseHead, ok := e.graph.HeadOf(e.baseBranch)
 	if !ok {
@@ -122,16 +134,34 @@ func (e *Engine) traceChainTo(target string) ([]Branch, error) {
 		return nil, fmt.Errorf("branch %q not found in graph", target)
 	}
 
-	ancestors := []Branch{{Name: e.baseBranch, Head: baseHead}}
 	if target == e.baseBranch {
-		return ancestors, nil
+		return []Branch{{Name: e.baseBranch, Head: baseHead}}, nil
 	}
 
+	// Primary graph walk: first-parent from target downward, collecting branches
+	// at each commit. target's co-located siblings are filtered per config.
+	targetConfigParent, _ := e.git.GetStackParent(target)
+
 	var chain []Branch
-	for commit := targetHead; e.graph.Contains(commit) && commit != baseHead; {
+	for commit := targetHead; e.graph.Contains(commit); {
 		if branches, ok := e.graph.BranchAt(commit); ok {
-			for _, branch := range branches {
-				chain = append(chain, Branch{Name: branch, Head: commit})
+			if commit == targetHead {
+				// At the target commit: add target first (top of local pair),
+				// then the configured co-located parent (one level below). All
+				// other co-located names are siblings and are skipped.
+				chain = append(chain, Branch{Name: target, Head: commit})
+				if targetConfigParent != "" {
+					for _, name := range branches {
+						if name != target && name == targetConfigParent {
+							chain = append(chain, Branch{Name: name, Head: commit})
+						}
+					}
+				}
+			} else {
+				// Below target's head: include all branches at this commit.
+				for _, name := range branches {
+					chain = append(chain, Branch{Name: name, Head: commit})
+				}
 			}
 		}
 		parent, ok := e.graph.FirstParent(commit)
@@ -140,26 +170,55 @@ func (e *Engine) traceChainTo(target string) ([]Branch, error) {
 		}
 		commit = parent
 	}
+
+	// chain is top-to-bottom; reverse to bottom-to-top.
 	slices.Reverse(chain)
-	ancestors = append(ancestors, chain...)
 
-	reached := ancestors[len(ancestors)-1].Name
-	if reached == target {
-		return ancestors, nil
+	// Divergence recovery: if the bottom of the chain isn't baseBranch, walk
+	// the stackParent config chain upward from the bottom-most collected branch
+	// until we reach baseBranch or give up.
+	bottomName := target
+	if len(chain) > 0 {
+		bottomName = chain[0].Name
+	}
+	if bottomName != e.baseBranch {
+		recovered := e.recoverViaConfig(bottomName)
+		chain = append(recovered, chain...)
 	}
 
-	var fallback []Branch
-	for branch := target; branch != reached && branch != e.baseBranch && branch != ""; {
-		head, _ := e.graph.HeadOf(branch)
-		fallback = append(fallback, Branch{Name: branch, Head: head})
-		parent, ok := e.git.GetStackParent(branch)
-		if !ok {
-			break
+	// Ensure baseBranch sits at the bottom. If the recovery did not produce it,
+	// prepend explicitly.
+	if len(chain) == 0 || chain[0].Name != e.baseBranch {
+		chain = append([]Branch{{Name: e.baseBranch, Head: baseHead}}, chain...)
+	}
+
+	// Persist every adjacent (child, parent) pair.
+	for i := 1; i < len(chain); i++ {
+		e.persistParent(chain[i].Name, chain[i-1].Name)
+	}
+
+	return chain, nil
+}
+
+// recoverViaConfig walks branch's stackParent config chain upward until it
+// reaches the base branch or can go no further. Returned slice is bottom-to-top
+// and excludes branch itself.
+func (e *Engine) recoverViaConfig(branch string) []Branch {
+	var chain []Branch
+	seen := map[string]bool{branch: true}
+	for current := branch; ; {
+		parent, ok := e.git.GetStackParent(current)
+		if !ok || seen[parent] {
+			return chain
 		}
-		branch = parent
+		seen[parent] = true
+		parentHead, _ := e.graph.HeadOf(parent)
+		chain = append([]Branch{{Name: parent, Head: parentHead}}, chain...)
+		if parent == e.baseBranch {
+			return chain
+		}
+		current = parent
 	}
-	slices.Reverse(fallback)
-	return append(ancestors, fallback...), nil
 }
 
 func (e *Engine) traceDescendants(
