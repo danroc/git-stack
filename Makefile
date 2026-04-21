@@ -92,11 +92,7 @@ clean: ## Clean the dist directory
 
 .PHONY: test
 test: ## Run all tests
-	go test -coverprofile=coverage.txt ./...
-
-.PHONY: test-bench
-test-bench: ## Run benchmarks
-	go test -bench=. -benchmem ./...
+	go test ./...
 
 # ======================================================================================
 # @Help
