@@ -333,12 +333,12 @@ func (e *Engine) directChildren(parent string) []string {
 	above := e.graphAboveSet(parent, parentHead)
 	above = e.filterSiblingConfig(above, parent)
 	above = e.filterCoLocated(above)
+
 	direct := e.filterGraphDirect(above, parent, parentHead)
 	direct = e.filterCoLocatedAbove(direct, parent, parentHead)
 	direct = e.recoverDiverged(direct, parent)
 
 	result := slices.Sorted(maps.Keys(direct))
-
 	e.persistChildren(result, parent, parentHead)
 
 	return result
