@@ -261,20 +261,15 @@ func (e *Engine) SubtreeMembers(branchName string) []BranchWithParent {
 }
 
 // SetParent sets branch's stack parent in git config.
+//
+// The merge-base is computed from the live branch heads (not the cached graph) so that
+// it remains correct even after a rebase has moved the branch within the same session.
 func (e *Engine) SetParent(branch, parent string) error {
 	if err := e.git.SetStackParent(branch, parent); err != nil {
 		return err
 	}
-	branchHead, err := e.mustHeadOf(branch)
+	base, err := e.git.ComputeMergeBase(branch, parent)
 	if err != nil {
-		return nil
-	}
-	parentHead, err := e.mustHeadOf(parent)
-	if err != nil {
-		return nil
-	}
-	base, ok := e.graph.MergeBase(branchHead, parentHead)
-	if !ok {
 		return nil
 	}
 	return e.git.SetStackParentMergeBase(branch, base)

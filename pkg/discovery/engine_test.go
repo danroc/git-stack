@@ -19,6 +19,30 @@ func initTestRepo(t *testing.T) *git.Client {
 	return git.NewClient(dir)
 }
 
+// initLinearRepo creates a real git repo with three commits and branches:
+// main (c0) ← feat-1 (c1) ← feat-2 (c2).
+func initLinearRepo(t *testing.T) *git.Client {
+	t.Helper()
+	dir := t.TempDir()
+	cmds := [][]string{
+		{"git", "init", "-b", "main", dir},
+		{"git", "-C", dir, "config", "user.email", "test@test"},
+		{"git", "-C", dir, "config", "user.name", "test"},
+		{"git", "-C", dir, "commit", "--allow-empty", "-m", "c0"},
+		{"git", "-C", dir, "checkout", "-b", "feat-1"},
+		{"git", "-C", dir, "commit", "--allow-empty", "-m", "c1"},
+		{"git", "-C", dir, "checkout", "-b", "feat-2"},
+		{"git", "-C", dir, "commit", "--allow-empty", "-m", "c2"},
+	}
+	for _, args := range cmds {
+		cmd := exec.Command(args[0], args[1:]...) //nolint:gosec
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%v: %v\n%s", args, err, out)
+		}
+	}
+	return git.NewClient(dir)
+}
+
 func newTestEngine(t *testing.T, g *git.Graph, base string) *Engine {
 	t.Helper()
 	return &Engine{
@@ -265,7 +289,13 @@ func TestBuildTree_MarksDriftWithoutCorrectingParent(t *testing.T) {
 }
 
 func TestSetParent_StoresLastKnownMergeBase(t *testing.T) {
-	e := newTestEngine(t, linearTestGraph(), "main")
+	g := initLinearRepo(t) // real repo: main ← feat-1 ← feat-2
+	graph, err := g.LoadGraph()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := &Engine{git: g, base: "main", graph: graph}
+
 	if err := e.SetParent("feat-2", "feat-1"); err != nil {
 		t.Fatal(err)
 	}
@@ -274,9 +304,11 @@ func TestSetParent_StoresLastKnownMergeBase(t *testing.T) {
 	if !ok || parent != "feat-1" {
 		t.Fatalf("stack parent = %q (ok=%v), want feat-1", parent, ok)
 	}
+
+	feat1Head, _ := graph.HeadOf("feat-1")
 	mergeBase, ok := e.git.GetStackParentMergeBase("feat-2")
-	if !ok || mergeBase != "c1" {
-		t.Fatalf("stack merge-base = %q (ok=%v), want c1", mergeBase, ok)
+	if !ok || mergeBase != feat1Head {
+		t.Fatalf("stack merge-base = %q (ok=%v), want %s", mergeBase, ok, feat1Head)
 	}
 }
 
