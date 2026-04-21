@@ -23,7 +23,7 @@ func linearGraph() *Graph {
 			"feat-1": "c1",
 			"feat-2": "c2",
 		},
-		branchAt: map[string][]string{
+		branchesAt: map[string][]string{
 			"c0": {"main"},
 			"c1": {"feat-1"},
 			"c2": {"feat-2"},
@@ -75,18 +75,14 @@ func TestGraph_BranchAt(t *testing.T) {
 	tests := []struct {
 		hash string
 		want []string
-		ok   bool
 	}{
-		{"c1", []string{"feat-1"}, true},
-		{"c2", []string{"feat-2"}, true},
-		{"c99", nil, false},
+		{"c1", []string{"feat-1"}},
+		{"c2", []string{"feat-2"}},
+		{"c99", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.hash, func(t *testing.T) {
-			got, ok := g.BranchAt(tt.hash)
-			if ok != tt.ok {
-				t.Fatalf("ok = %v, want %v", ok, tt.ok)
-			}
+			got := g.BranchesAt(tt.hash)
 			if len(got) != len(tt.want) {
 				t.Fatalf("got %v, want %v", got, tt.want)
 			}
@@ -101,7 +97,7 @@ func TestGraph_BranchAt(t *testing.T) {
 
 func TestGraph_Branches(t *testing.T) {
 	g := linearGraph()
-	got := g.AllBranches()
+	got := g.Branches()
 	want := []string{"feat-1", "feat-2", "main"}
 	if len(got) != len(want) {
 		t.Fatalf("Branches() = %v, want %v", got, want)
@@ -267,10 +263,7 @@ func TestGraph_BranchAt_MultipleBranches(t *testing.T) {
 			"feat-b": "c1", // same HEAD as feat-a
 		},
 	)
-	branches, ok := g.BranchAt("c1")
-	if !ok {
-		t.Fatal("expected c1 to have branches")
-	}
+	branches := g.BranchesAt("c1")
 	want := []string{"feat-a", "feat-b"}
 	if !slices.Equal(branches, want) {
 		t.Errorf("got %v, want %v (sorted alphabetically)", branches, want)

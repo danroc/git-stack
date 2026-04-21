@@ -12,9 +12,9 @@ import (
 // the base branch. All ancestry and distance queries run in-process after an initial
 // two-command load.
 type Graph struct {
-	parents  map[string][]string // commit_hash → parent_hashes
-	heads    map[string]string   // branch_name → commit_hash
-	branchAt map[string][]string // commit_hash → branch_names (sorted)
+	parents    map[string][]string // commit_hash → parent_hashes
+	heads      map[string]string   // branch_name → commit_hash
+	branchesAt map[string][]string // commit_hash → branch_names (sorted)
 }
 
 // LoadGraph builds the commit graph for all local branches. The graph floor is the
@@ -52,9 +52,9 @@ func (g *Client) listBranchHeads() (map[string]string, error) {
 
 func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 	graph := &Graph{
-		parents:  make(map[string][]string),
-		heads:    heads,
-		branchAt: make(map[string][]string),
+		parents:    make(map[string][]string),
+		heads:      heads,
+		branchesAt: make(map[string][]string),
 	}
 	if len(heads) == 0 {
 		return graph, nil
@@ -62,9 +62,9 @@ func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 
 	// Map commits → branches pointing to them.
 	for branch, hash := range heads {
-		graph.branchAt[hash] = append(graph.branchAt[hash], branch)
+		graph.branchesAt[hash] = append(graph.branchesAt[hash], branch)
 	}
-	for _, branches := range graph.branchAt {
+	for _, branches := range graph.branchesAt {
 		slices.Sort(branches)
 	}
 
@@ -133,9 +133,9 @@ func NewGraph(parents map[string][]string, heads map[string]string) *Graph {
 	}
 
 	return &Graph{
-		parents:  parents,
-		heads:    heads,
-		branchAt: branchAt,
+		parents:    parents,
+		heads:      heads,
+		branchesAt: branchAt,
 	}
 }
 
@@ -159,19 +159,15 @@ func (g *Graph) HeadOf(branch string) (string, bool) {
 	return h, ok
 }
 
-// BranchAt returns all branches whose HEAD is at hash, sorted alphabetically. Returns
-// (nil, false) when no branch points at hash. The returned slice is a copy; callers may
-// modify it freely.
-func (g *Graph) BranchAt(hash string) ([]string, bool) {
-	branches, ok := g.branchAt[hash]
-	if !ok {
-		return nil, false
-	}
-	return slices.Clone(branches), true
+// BranchesAt returns all branches whose HEAD is at hash, sorted alphabetically. The
+// returned slice is a copy; callers may modify it freely.
+func (g *Graph) BranchesAt(hash string) []string {
+	branches := g.branchesAt[hash]
+	return slices.Clone(branches)
 }
 
-// AllBranches returns all local branch names known to the graph, sorted alphabetically.
-func (g *Graph) AllBranches() []string {
+// Branches returns all local branch names known to the graph, sorted alphabetically.
+func (g *Graph) Branches() []string {
 	return slices.Sorted(maps.Keys(g.heads))
 }
 
@@ -211,6 +207,44 @@ func (g *Graph) IsAncestor(ancestor, descendant string) bool {
 	return false
 }
 
+// Traverse visits all commits reachable from start, including start itself, in BFS
+// order. If visit returns false, the traversal is aborted.
+func (g *Graph) Traverse(start string, visit func(hash string) bool) {
+	if !g.Contains(start) {
+		return
+	}
+
+	visited := map[string]bool{start: true}
+	queue := []string{start}
+
+	for len(queue) > 0 {
+		c := queue[0]
+		queue = queue[1:]
+
+		if !visit(c) {
+			return
+		}
+
+		for _, p := range g.parents[c] {
+			if !visited[p] {
+				visited[p] = true
+				queue = append(queue, p)
+			}
+		}
+	}
+}
+
+// AncestorsOf returns all commits reachable from hash, including hash itself, in BFS
+// order.
+func (g *Graph) AncestorsOf(hash string) []string {
+	var ancestors []string
+	g.Traverse(hash, func(h string) bool {
+		ancestors = append(ancestors, h)
+		return true
+	})
+	return ancestors
+}
+
 // CommitsBetween returns the number of commits between a and b relative to their
 // closest common ancestor in the graph, as measured along first-parent chains only.
 //
@@ -220,14 +254,14 @@ func (g *Graph) IsAncestor(ancestor, descendant string) bool {
 // If no common ancestor exists on the first-parent chains, the result has both counts
 // set to zero.
 func (g *Graph) CommitsBetween(a, b string) CommitsBetweenResult {
-	commonAncestor, ok := g.closestCommonAncestor(a, b)
-	if !ok {
+	mb := g.MergeBase(a, b)
+	if mb == "" {
 		return CommitsBetweenResult{}
 	}
 
 	return CommitsBetweenResult{
-		Ahead:  g.countStepsToAncestor(a, commonAncestor),
-		Behind: g.countStepsToAncestor(b, commonAncestor),
+		Ahead:  g.countStepsToAncestor(a, mb),
+		Behind: g.countStepsToAncestor(b, mb),
 	}
 }
 
@@ -246,37 +280,22 @@ func (g *Graph) countStepsToAncestor(hash, target string) int {
 	return count
 }
 
-// closestCommonAncestor returns the closest commit reachable from both a and b along
-// their first-parent chains, or "" if the chains share no common commit. It first
-// collects all commits on a's chain into a set, then walks b's chain until it finds a
-// hit.
-//
-// Because it follows only first-parent chains, it may miss a common ancestor that is
-// only reachable via a non-first parent (e.g. the second parent of a merge commit).
-func (g *Graph) closestCommonAncestor(a, b string) (string, bool) {
-	// Collect all first-parent ancestors of a (including a itself).
-	aAncestors := map[string]bool{a: true}
-	for hash := a; ; {
-		parent, ok := g.FirstParent(hash)
-		if !ok {
-			break
-		}
-		aAncestors[parent] = true
-		hash = parent
+// MergeBase returns the closest commit reachable from both a and b along
+// their first-parent chains, or "" if the chains share no common commit.
+func (g *Graph) MergeBase(a, b string) string {
+	ancestors := make(map[string]bool)
+	for _, c := range g.AncestorsOf(a) {
+		ancestors[c] = true
 	}
 
-	// Walk first-parent chain from b; the first node found in aAncestors is the closest
-	// common ancestor.
-	for hash := b; ; {
-		if aAncestors[hash] {
-			return hash, true
+	var base string
+	g.Traverse(b, func(c string) bool {
+		if ancestors[c] {
+			base = c
+			return false
 		}
-		parent, ok := g.FirstParent(hash)
-		if !ok {
-			break
-		}
-		hash = parent
-	}
+		return true
+	})
 
-	return "", false
+	return base
 }

@@ -146,7 +146,7 @@ func (e *Engine) traceChainTo(target string) ([]Branch, error) {
 
 	var chain []Branch
 	for commit := targetHead; e.graph.Contains(commit); {
-		if branches, ok := e.graph.BranchAt(commit); ok {
+		if branches := e.graph.BranchesAt(commit); len(branches) > 0 {
 			if commit == targetHead {
 				// Target first, then its configured co-located parent — reversed to
 				// bottom-to-top order after. Skip other co-located siblings.
@@ -350,7 +350,7 @@ func (e *Engine) directChildren(parent string) []string {
 // graphAboveSet returns branches strictly above parent in the graph.
 func (e *Engine) graphAboveSet(parent, parentHead string) map[string]bool {
 	above := make(map[string]bool)
-	for _, branch := range e.graph.AllBranches() {
+	for _, branch := range e.graph.Branches() {
 		if branch == parent || branch == e.baseBranch {
 			continue
 		}
@@ -404,7 +404,7 @@ func (e *Engine) filterCoLocated(above map[string]bool) map[string]bool {
 	result := make(map[string]bool)
 	for b := range above {
 		bHead, _ := e.graph.HeadOf(b)
-		coLocated, _ := e.graph.BranchAt(bHead)
+		coLocated := e.graph.BranchesAt(bHead)
 		if len(coLocated) < 2 {
 			result[b] = true
 			continue
@@ -437,7 +437,7 @@ func (e *Engine) filterGraphDirect(
 	for candidate := range above {
 		cHead, _ := e.graph.HeadOf(candidate)
 		isDirect := true
-		for _, other := range e.graph.AllBranches() {
+		for _, other := range e.graph.Branches() {
 			if other == candidate || other == e.baseBranch || other == parent {
 				continue
 			}
@@ -494,7 +494,7 @@ func (e *Engine) recoverDiverged(
 	direct map[string]bool,
 	parent string,
 ) map[string]bool {
-	for _, branch := range e.graph.AllBranches() {
+	for _, branch := range e.graph.Branches() {
 		if direct[branch] || branch == parent || branch == e.baseBranch {
 			continue
 		}
@@ -546,8 +546,8 @@ func (e *Engine) coLocatedOwnerFor(candidate, candidateHead string) string {
 	for commit, ok := e.graph.FirstParent(
 		candidateHead,
 	); ok; commit, ok = e.graph.FirstParent(commit) {
-		branches, haveBranches := e.graph.BranchAt(commit)
-		if !haveBranches {
+		branches := e.graph.BranchesAt(commit)
+		if len(branches) == 0 {
 			continue
 		}
 		if len(branches) < 2 {
@@ -683,13 +683,13 @@ func (e *Engine) hasBranchAncestor(branch string) bool {
 	if !ok {
 		return false
 	}
-	if branches, ok := e.graph.BranchAt(branchHead); ok && len(branches) >= 2 {
+	if branches := e.graph.BranchesAt(branchHead); len(branches) >= 2 {
 		return false
 	}
 	for commit, ok := e.graph.FirstParent(
 		branchHead,
 	); ok; commit, ok = e.graph.FirstParent(commit) {
-		if branches, haveBranches := e.graph.BranchAt(commit); haveBranches {
+		if branches := e.graph.BranchesAt(commit); len(branches) > 0 {
 			for _, b := range branches {
 				if b != branch && b != e.baseBranch {
 					return true
