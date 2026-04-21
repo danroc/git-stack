@@ -57,3 +57,27 @@ func TestMergeBaseOctopus_LinearHistory(t *testing.T) {
 		t.Errorf("merge-base = %q, want %q", base, c0)
 	}
 }
+
+func TestRecordStackParent_StoresMergeBase(t *testing.T) {
+	c, dir := initRepo(t)
+	runGit(t, dir, "checkout", "-q", "-b", "feat-1")
+	runGit(t, dir, "commit", "--allow-empty", "-m", "c1")
+	runGit(t, dir, "checkout", "-q", "-b", "feat-2")
+	runGit(t, dir, "commit", "--allow-empty", "-m", "c2")
+
+	if err := c.RecordStackParent("feat-2", "feat-1"); err != nil {
+		t.Fatal(err)
+	}
+
+	parent, ok := c.GetStackParent("feat-2")
+	if !ok || parent != "feat-1" {
+		t.Fatalf("GetStackParent(feat-2) = %q (ok=%v), want feat-1", parent, ok)
+	}
+	mergeBase, ok := c.GetStackParentMergeBase("feat-2")
+	if !ok {
+		t.Fatal("expected stored merge-base for feat-2")
+	}
+	if mergeBase != runGit(t, dir, "rev-parse", "feat-1") {
+		t.Fatalf("merge-base = %q, want feat-1 head", mergeBase)
+	}
+}

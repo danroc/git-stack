@@ -185,28 +185,39 @@ func (g *Graph) FirstParent(hash string) (string, bool) {
 	return ps[0], true
 }
 
-// Traverse visits all commits reachable from start, including start itself, in BFS
-// order. If visit returns false, the traversal is aborted.
-func (g *Graph) Traverse(start string, visit func(hash string) bool) {
+// Traverse visits ancestor commits reachable from start, including start itself, in
+// breadth-first order over the full parent DAG.
+//
+// Guarantees:
+// - only ancestors of start are visited
+// - each commit is visited at most once
+// - depth is the shortest number of parent edges from start to the visited commit
+// - traversal stops immediately when visit returns false
+func (g *Graph) Traverse(start string, visit func(hash string, depth int) bool) {
 	if !g.Contains(start) {
 		return
 	}
 
+	type step struct {
+		hash  string
+		depth int
+	}
+
 	visited := map[string]bool{start: true}
-	queue := []string{start}
+	queue := []step{{hash: start, depth: 0}}
 
 	for len(queue) > 0 {
-		c := queue[0]
+		cur := queue[0]
 		queue = queue[1:]
 
-		if !visit(c) {
+		if !visit(cur.hash, cur.depth) {
 			return
 		}
 
-		for _, p := range g.parents[c] {
-			if !visited[p] {
-				visited[p] = true
-				queue = append(queue, p)
+		for _, parent := range g.parents[cur.hash] {
+			if !visited[parent] {
+				visited[parent] = true
+				queue = append(queue, step{hash: parent, depth: cur.depth + 1})
 			}
 		}
 	}
@@ -215,7 +226,7 @@ func (g *Graph) Traverse(start string, visit func(hash string) bool) {
 // IsAncestor reports whether ancestor is reachable from descendant.
 func (g *Graph) IsAncestor(ancestor, descendant string) bool {
 	var found bool
-	g.Traverse(descendant, func(hash string) bool {
+	g.Traverse(descendant, func(hash string, _ int) bool {
 		if hash == ancestor {
 			found = true
 			return false
@@ -229,7 +240,7 @@ func (g *Graph) IsAncestor(ancestor, descendant string) bool {
 // order.
 func (g *Graph) AncestorsOf(hash string) []string {
 	var ancestors []string
-	g.Traverse(hash, func(h string) bool {
+	g.Traverse(hash, func(h string, _ int) bool {
 		ancestors = append(ancestors, h)
 		return true
 	})
@@ -245,14 +256,14 @@ func (g *Graph) AncestorsOf(hash string) []string {
 // If no common ancestor exists on the first-parent chains, the result has both counts
 // set to zero.
 func (g *Graph) CommitsBetween(a, b string) CommitsBetweenResult {
-	mb, ok := g.MergeBase(a, b)
+	base, ok := g.MergeBase(a, b)
 	if !ok {
 		return CommitsBetweenResult{}
 	}
 
 	return CommitsBetweenResult{
-		Ahead:  g.countStepsToAncestor(a, mb),
-		Behind: g.countStepsToAncestor(b, mb),
+		Ahead:  g.countStepsToAncestor(a, base),
+		Behind: g.countStepsToAncestor(b, base),
 	}
 }
 
@@ -271,22 +282,49 @@ func (g *Graph) countStepsToAncestor(hash, target string) int {
 	return count
 }
 
-// MergeBase returns the closest commit reachable from both a and b along
-// their first-parent chains, or "" if the chains share no common commit.
+// MergeBase returns a common ancestor of a and b from the full commit DAG.
+//
+// The search marks every ancestor of a, then walks b's ancestors in breadth-first
+// order. The first marked commit found during b's BFS is returned, which makes the
+// result the closest common ancestor to b under this traversal.
 func (g *Graph) MergeBase(a, b string) (string, bool) {
+	if !g.Contains(a) || !g.Contains(b) {
+		return "", false
+	}
+
 	ancestors := make(map[string]bool)
-	for _, c := range g.AncestorsOf(a) {
-		ancestors[c] = true
+	for _, hash := range g.AncestorsOf(a) {
+		ancestors[hash] = true
 	}
 
 	var base string
-	g.Traverse(b, func(c string) bool {
-		if ancestors[c] {
-			base = c
+	g.Traverse(b, func(hash string, _ int) bool {
+		if ancestors[hash] {
+			base = hash
 			return false
 		}
 		return true
 	})
 
 	return base, base != ""
+}
+
+// ShortestPathLenToAncestor returns the shortest number of parent edges from descendant
+// to ancestor in the full DAG. The boolean is false when ancestor is not reachable.
+func (g *Graph) ShortestPathLenToAncestor(descendant, ancestor string) (int, bool) {
+	if !g.Contains(descendant) || !g.Contains(ancestor) {
+		return 0, false
+	}
+
+	var distance int
+	var found bool
+	g.Traverse(descendant, func(hash string, depth int) bool {
+		if hash == ancestor {
+			distance = depth
+			found = true
+			return false
+		}
+		return true
+	})
+	return distance, found
 }

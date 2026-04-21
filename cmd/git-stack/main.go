@@ -118,7 +118,7 @@ func cmdAdd() *cobra.Command {
 			if err := g.CreateBranch(args[0]); err != nil {
 				return err
 			}
-			return g.SetStackParent(args[0], current)
+			return g.RecordStackParent(args[0], current)
 		},
 	}
 }
@@ -140,7 +140,7 @@ func cmdParent() *cobra.Command {
 			} else {
 				branch, parent = args[0], args[1]
 			}
-			return g.SetStackParent(branch, parent)
+			return g.RecordStackParent(branch, parent)
 		},
 	}
 }

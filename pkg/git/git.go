@@ -13,8 +13,9 @@ import (
 
 // Client executes git commands in a fixed working directory.
 type Client struct {
-	dir              string
-	stackParentCache map[string]string // nil = not yet loaded
+	dir                 string
+	stackParentCache    map[string]string // nil = not yet loaded
+	stackMergeBaseCache map[string]string // nil = not yet loaded
 }
 
 // NewClient returns a Client that runs all commands with cmd.Dir set to dir.
@@ -110,20 +111,63 @@ func (g *Client) SetStackParent(branch, parent string) error {
 	return nil
 }
 
+// SetStackParentMergeBase records the last known merge-base for branch's configured
+// stack parent in local git config.
+func (g *Client) SetStackParentMergeBase(branch, mergeBase string) error {
+	_, err := g.run(
+		"config",
+		"--local",
+		"branch."+branch+".stackParentMergeBase",
+		mergeBase,
+	)
+	if err != nil {
+		return err
+	}
+	if g.stackMergeBaseCache != nil {
+		g.stackMergeBaseCache[branch] = mergeBase
+	}
+	return nil
+}
+
 // GetStackParent returns the configured stack parent, or ("", false) if unset.
 // All values are loaded in a single git config call on first use and cached.
 func (g *Client) GetStackParent(branch string) (string, bool) {
 	if g.stackParentCache == nil {
-		g.loadStackParentCache()
+		g.loadStackCaches()
 	}
 	parent, ok := g.stackParentCache[branch]
 	return parent, ok
 }
 
-// loadStackParentCache loads all branch.*.stackParent entries from local git
-// config in a single subprocess call.
-func (g *Client) loadStackParentCache() {
+// GetStackParentMergeBase returns the stored last known merge-base for branch's stack
+// parent, or ("", false) if unset.
+func (g *Client) GetStackParentMergeBase(branch string) (string, bool) {
+	if g.stackMergeBaseCache == nil {
+		g.loadStackCaches()
+	}
+	mergeBase, ok := g.stackMergeBaseCache[branch]
+	return mergeBase, ok
+}
+
+// RecordStackParent updates the configured parent relationship and snapshots the
+// current
+// merge-base at the same time. This is only for explicit user-driven mutations.
+func (g *Client) RecordStackParent(branch, parent string) error {
+	if err := g.SetStackParent(branch, parent); err != nil {
+		return err
+	}
+	mergeBase, err := g.ComputeMergeBase(branch, parent)
+	if err != nil {
+		return err
+	}
+	return g.SetStackParentMergeBase(branch, mergeBase)
+}
+
+// loadStackCaches loads all branch.*.stackParent and branch.*.stackParentMergeBase
+// entries from local git config in a single subprocess call.
+func (g *Client) loadStackCaches() {
 	g.stackParentCache = make(map[string]string)
+	g.stackMergeBaseCache = make(map[string]string)
 	out, err := g.run("config", "--local", "--list")
 	if err != nil {
 		return
@@ -143,11 +187,22 @@ func (g *Client) loadStackParentCache() {
 			continue
 		}
 		lastDot := strings.LastIndexByte(rest, '.')
-		if lastDot < 0 || !strings.EqualFold(rest[lastDot+1:], "stackparent") {
+		if lastDot < 0 {
 			continue
 		}
-		g.stackParentCache[rest[:lastDot]] = value
+		branch := rest[:lastDot]
+		switch variable := rest[lastDot+1:]; {
+		case strings.EqualFold(variable, "stackparent"):
+			g.stackParentCache[branch] = value
+		case strings.EqualFold(variable, "stackparentmergebase"):
+			g.stackMergeBaseCache[branch] = value
+		}
 	}
+}
+
+// ComputeMergeBase returns git's merge-base for two refs.
+func (g *Client) ComputeMergeBase(a, b string) (string, error) {
+	return g.run("merge-base", a, b)
 }
 
 // getUpstream returns the remote and remote-tracking branch for a local branch. Returns

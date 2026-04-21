@@ -153,6 +153,60 @@ func TestGraph_IsAncestor(t *testing.T) {
 	}
 }
 
+func TestGraph_IsAncestor_UsesAllParents(t *testing.T) {
+	g := NewGraph(
+		map[string][]string{
+			"c0": {},
+			"c1": {"c0"},
+			"c2": {"c1"},
+			"m1": {"c2", "c0"},
+		},
+		map[string]string{
+			"main": "m1",
+			"base": "c0",
+		},
+	)
+
+	if !g.IsAncestor("c0", "m1") {
+		t.Fatal("expected c0 to be an ancestor of merge commit m1 via second parent")
+	}
+}
+
+func TestGraph_Traverse_ReportsBFSDepth(t *testing.T) {
+	g := NewGraph(
+		map[string][]string{
+			"c0": {},
+			"c1": {"c0"},
+			"c2": {"c1"},
+			"c3": {"c1"},
+			"m1": {"c2", "c3"},
+		},
+		map[string]string{"main": "m1"},
+	)
+
+	got := map[string]int{}
+	g.Traverse("m1", func(hash string, depth int) bool {
+		got[hash] = depth
+		return true
+	})
+
+	want := map[string]int{
+		"m1": 0,
+		"c2": 1,
+		"c3": 1,
+		"c1": 2,
+		"c0": 3,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("Traverse visited %v, want %v", got, want)
+	}
+	for hash, depth := range want {
+		if got[hash] != depth {
+			t.Fatalf("depth[%s] = %d, want %d", hash, got[hash], depth)
+		}
+	}
+}
+
 func TestGraph_CommitsBetween(t *testing.T) {
 	g := linearGraph()
 	tests := []struct {
@@ -251,6 +305,30 @@ func TestGraph_CommitsBetween_Divergent(t *testing.T) {
 				t.Errorf("got %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestGraph_MergeBase_UsesAllParents(t *testing.T) {
+	g := NewGraph(
+		map[string][]string{
+			"c0":    {},
+			"c1":    {"c0"},
+			"c2":    {"c1"},
+			"side":  {"c0"},
+			"merge": {"c2", "side"},
+		},
+		map[string]string{
+			"main": "merge",
+			"side": "side",
+		},
+	)
+
+	got, ok := g.MergeBase("merge", "side")
+	if !ok {
+		t.Fatal("MergeBase should find a common ancestor through the second parent")
+	}
+	if got != "side" {
+		t.Fatalf("MergeBase(merge, side) = %q, want side", got)
 	}
 }
 
