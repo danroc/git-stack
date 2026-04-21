@@ -245,8 +245,8 @@ func (g *Graph) AncestorsOf(hash string) []string {
 // If no common ancestor exists on the first-parent chains, the result has both counts
 // set to zero.
 func (g *Graph) CommitsBetween(a, b string) CommitsBetweenResult {
-	mb := g.MergeBase(a, b)
-	if mb == "" {
+	mb, ok := g.MergeBase(a, b)
+	if !ok {
 		return CommitsBetweenResult{}
 	}
 
@@ -273,7 +273,7 @@ func (g *Graph) countStepsToAncestor(hash, target string) int {
 
 // MergeBase returns the closest commit reachable from both a and b along
 // their first-parent chains, or "" if the chains share no common commit.
-func (g *Graph) MergeBase(a, b string) string {
+func (g *Graph) MergeBase(a, b string) (string, bool) {
 	ancestors := make(map[string]bool)
 	for _, c := range g.AncestorsOf(a) {
 		ancestors[c] = true
@@ -288,5 +288,5 @@ func (g *Graph) MergeBase(a, b string) string {
 		return true
 	})
 
-	return base
+	return base, base != ""
 }
