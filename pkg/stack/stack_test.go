@@ -11,6 +11,7 @@ import (
 // fakeDiscoverer lets stack-level tests control discovery without touching git.
 type fakeDiscoverer struct {
 	base         string
+	stack        []discovery.Branch // returned by DiscoverStack when non-nil
 	parents      map[string]string
 	parentErr    map[string]error
 	subtrees     map[string][]discovery.BranchWithParent
@@ -24,7 +25,7 @@ func (f *fakeDiscoverer) DiscoverStack(
 	_ string,
 	_ discovery.ChooseBranchFn,
 ) ([]discovery.Branch, error) {
-	return nil, nil
+	return f.stack, nil
 }
 
 func (f *fakeDiscoverer) IsBranchDescendant(ancestor, descendant string) bool {
@@ -235,6 +236,40 @@ func TestMove_CycleDetectionViaConfigChain(t *testing.T) {
 		Move("feat-1", "feat-2", nil)
 	if err == nil || !strings.Contains(err.Error(), "cycle") {
 		t.Errorf("Move must fail with cycle error, got: %v", err)
+	}
+}
+
+func TestRebase_UpdatesMergeBaseAfterEachBranch(t *testing.T) {
+	repo := &fakeRepository{currentBranch: "feat-2"}
+	disc := &fakeDiscoverer{
+		base: "main",
+		stack: []discovery.Branch{
+			{Name: "main"},
+			{Name: "feat-1"},
+			{Name: "feat-2"},
+		},
+	}
+
+	st := &Stack{git: repo, disc: disc}
+	if err := st.Rebase(nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	wantCalls := []string{
+		"CurrentBranch",
+		"Checkout:feat-1",
+		"Rebase:main",
+		"Checkout:feat-2",
+		"Rebase:feat-1",
+		"Checkout:feat-2",
+	}
+	if !equalStrings(repo.calls, wantCalls) {
+		t.Errorf("git calls =\n  %v\nwant =\n  %v", repo.calls, wantCalls)
+	}
+
+	wantParents := []string{"feat-1:main", "feat-2:feat-1"}
+	if !equalStrings(disc.setParentLog, wantParents) {
+		t.Errorf("SetParent log = %v, want %v", disc.setParentLog, wantParents)
 	}
 }
 

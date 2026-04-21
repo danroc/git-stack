@@ -145,6 +145,9 @@ func (s *Stack) Rebase(notify NotifyFn) error {
 		if err := s.git.Rebase(parent); err != nil {
 			return fmt.Errorf("rebase %s onto %s failed: %w", branch, parent, err)
 		}
+		if err := s.disc.SetParent(branch, parent); err != nil {
+			return fmt.Errorf("updating stack metadata for %s: %w", branch, err)
+		}
 		n(Step{Branch: branch, Parent: parent}, true)
 		return nil
 	})
