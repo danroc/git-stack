@@ -64,11 +64,12 @@ func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 		return graph, nil
 	}
 
+	// Map commits → branches pointing to them.
 	for branch, hash := range heads {
 		graph.branchAt[hash] = append(graph.branchAt[hash], branch)
 	}
-	for _, names := range graph.branchAt {
-		slices.Sort(names)
+	for _, branches := range graph.branchAt {
+		slices.Sort(branches)
 	}
 
 	// Compute the floor: the merge-base of every branch head (including the base
@@ -97,17 +98,34 @@ func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 		return nil, err
 	}
 
-	scanner := bufio.NewScanner(strings.NewReader(out))
-	for scanner.Scan() {
-		parts := strings.Fields(scanner.Text())
-		if len(parts) == 0 {
-			continue
-		}
-		graph.parents[parts[0]] = parts[1:]
+	parents, err := parseParentLines(out)
+	if err != nil {
+		return nil, err
 	}
+
+	graph.parents = parents
 	graph.parents[floor] = nil
 
 	return graph, nil
+}
+
+func parseParentLines(out string) (map[string][]string, error) {
+	parents := make(map[string][]string)
+
+	scanner := bufio.NewScanner(strings.NewReader(out))
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) == 0 {
+			continue
+		}
+		commit := fields[0]
+		parents[commit] = fields[1:]
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return parents, nil
 }
 
 // NewGraph constructs a Graph from raw commit data. When two branches share a HEAD,
