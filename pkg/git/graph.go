@@ -180,33 +180,6 @@ func (g *Graph) FirstParent(hash string) (string, bool) {
 	return ps[0], true
 }
 
-// IsAncestor reports whether ancestor is reachable from descendant.
-func (g *Graph) IsAncestor(ancestor, descendant string) bool {
-	if ancestor == descendant {
-		return true
-	}
-
-	visited := map[string]bool{descendant: true}
-	queue := []string{descendant}
-
-	for len(queue) > 0 {
-		c := queue[0]
-		queue = queue[1:]
-
-		for _, p := range g.parents[c] {
-			if p == ancestor {
-				return true
-			}
-			if !visited[p] {
-				visited[p] = true
-				queue = append(queue, p)
-			}
-		}
-	}
-
-	return false
-}
-
 // Traverse visits all commits reachable from start, including start itself, in BFS
 // order. If visit returns false, the traversal is aborted.
 func (g *Graph) Traverse(start string, visit func(hash string) bool) {
@@ -232,6 +205,19 @@ func (g *Graph) Traverse(start string, visit func(hash string) bool) {
 			}
 		}
 	}
+}
+
+// IsAncestor reports whether ancestor is reachable from descendant.
+func (g *Graph) IsAncestor(ancestor, descendant string) bool {
+	var found bool
+	g.Traverse(descendant, func(hash string) bool {
+		if hash == ancestor {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
 }
 
 // AncestorsOf returns all commits reachable from hash, including hash itself, in BFS
