@@ -76,7 +76,7 @@ func DetectBase(g *git.Client) (string, error) {
 // TreeNode is a node in the full branch tree built by BuildTree.
 type TreeNode struct {
 	Branch       Branch
-	CommitsAhead int
+	AheadCount int
 	Children     []*TreeNode
 }
 
@@ -282,7 +282,7 @@ func (e *Engine) buildChildren(node *TreeNode) {
 		childHash, _ := e.graph.HeadOf(child)
 		childNode := &TreeNode{
 			Branch:       Branch{Name: child, Head: childHash},
-			CommitsAhead: e.graph.CommitsAhead(node.Branch.Head, childHash),
+			AheadCount: e.graph.CommitsBetween(childHash, node.Branch.Head).Ahead,
 		}
 		node.Children = append(node.Children, childNode)
 		e.buildChildren(childNode)

@@ -402,7 +402,7 @@ func TestBuildTree_Linear(t *testing.T) {
 	}
 }
 
-func TestBuildTree_CommitsAhead(t *testing.T) {
+func TestBuildTree_AheadCount(t *testing.T) {
 	// feat-1 is 2 commits above main; feat-2 is 1 commit above feat-1.
 	// c1 is an intermediate commit with no branch.
 	g := git.NewGraph(
@@ -428,14 +428,14 @@ func TestBuildTree_CommitsAhead(t *testing.T) {
 	if feat1.Branch.Name != "feat-1" {
 		t.Fatalf("root.Children[0] = %q, want feat-1", feat1.Branch.Name)
 	}
-	if feat1.CommitsAhead != 2 {
-		t.Errorf("feat-1 CommitsAhead = %d, want 2", feat1.CommitsAhead)
+	if feat1.AheadCount != 2 {
+		t.Errorf("feat-1 AheadCount = %d, want 2", feat1.AheadCount)
 	}
 	if len(feat1.Children) != 1 {
 		t.Fatalf("feat-1 has %d children, want 1", len(feat1.Children))
 	}
-	if feat1.Children[0].CommitsAhead != 1 {
-		t.Errorf("feat-2 CommitsAhead = %d, want 1", feat1.Children[0].CommitsAhead)
+	if feat1.Children[0].AheadCount != 1 {
+		t.Errorf("feat-2 AheadCount = %d, want 1", feat1.Children[0].AheadCount)
 	}
 }
 
