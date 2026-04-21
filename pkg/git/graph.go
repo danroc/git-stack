@@ -207,31 +207,25 @@ func (g *Graph) CommitsBetween(a, b string) CommitsBetweenResult {
 		return CommitsBetweenResult{}
 	}
 
-	var ahead, behind int
+	return CommitsBetweenResult{
+		Ahead:  g.countStepsToAncestor(a, commonAncestor),
+		Behind: g.countStepsToAncestor(b, commonAncestor),
+	}
+}
 
-	// Count ahead: first-parent chain from a to common ancestor.
-	hash := a
-	for g.Contains(hash) && hash != commonAncestor {
+// countStepsToAncestor counts the number of first-parent steps from hash
+// up to (but not including) target along the first-parent chain.
+func (g *Graph) countStepsToAncestor(hash, target string) int {
+	var count int
+	for g.Contains(hash) && hash != target {
 		parent, ok := g.FirstParent(hash)
 		if !ok {
 			break
 		}
-		ahead++
+		count++
 		hash = parent
 	}
-
-	// Count behind: first-parent chain from b to common ancestor.
-	hash = b
-	for g.Contains(hash) && hash != commonAncestor {
-		parent, ok := g.FirstParent(hash)
-		if !ok {
-			break
-		}
-		behind++
-		hash = parent
-	}
-
-	return CommitsBetweenResult{Ahead: ahead, Behind: behind}
+	return count
 }
 
 // closestCommonAncestor finds the nearest commit reachable from both a and b
