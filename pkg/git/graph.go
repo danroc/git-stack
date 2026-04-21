@@ -118,6 +118,13 @@ func NewGraph(parents map[string][]string, heads map[string]string) *Graph {
 	return &Graph{parents: parents, heads: heads, branchAt: branchAt}
 }
 
+// CommitsBetweenResult holds the count of commits ahead and behind
+// two branches, relative to their closest common ancestor.
+type CommitsBetweenResult struct {
+	Ahead  int
+	Behind int
+}
+
 // Contains reports whether hash is in the loaded graph (at or above the floor
 // commit — the octopus merge-base of all branch heads).
 func (g *Graph) Contains(hash string) bool {
@@ -183,18 +190,91 @@ func (g *Graph) IsAncestor(ancestorHash, descendantHash string) bool {
 	return false
 }
 
-// CommitsAhead returns the number of commits in branchHash's first-parent chain that
-// are above parentHash.
-func (g *Graph) CommitsAhead(parentHash, branchHash string) int {
-	count := 0
+// CommitsBetween returns the number of commits between branchHash and
+// parentHash relative to their closest common ancestor in the graph.
+//
+// Ahead is the first-parent chain distance from the common ancestor to
+// branchHash. Behind is the first-parent chain distance from the common
+// ancestor to parentHash.
+func (g *Graph) CommitsBetween(branchHash, parentHash string) CommitsBetweenResult {
+	// Find the closest common ancestor via bidirectional BFS.
+	commonAncestor := g.closestCommonAncestor(branchHash, parentHash)
+	if commonAncestor == "" {
+		return CommitsBetweenResult{}
+	}
+
+	var ahead, behind int
+
+	// Count ahead: first-parent chain from branchHash to common ancestor.
 	hash := branchHash
-	for g.Contains(hash) && hash != parentHash {
+	for g.Contains(hash) && hash != commonAncestor {
 		parent, ok := g.FirstParent(hash)
 		if !ok {
 			break
 		}
-		count++
+		ahead++
 		hash = parent
 	}
-	return count
+
+	// Count behind: first-parent chain from parentHash to common ancestor.
+	hash = parentHash
+	for g.Contains(hash) && hash != commonAncestor {
+		parent, ok := g.FirstParent(hash)
+		if !ok {
+			break
+		}
+		behind++
+		hash = parent
+	}
+
+	return CommitsBetweenResult{Ahead: ahead, Behind: behind}
+}
+
+// closestCommonAncestor finds the nearest commit reachable from both
+// branchHash and parentHash by walking parent chains. It uses bidirectional
+// BFS to minimize the number of graph nodes visited.
+func (g *Graph) closestCommonAncestor(a, b string) string {
+	if a == b {
+		return a
+	}
+
+	aVisited := map[string]bool{a: true}
+	bVisited := map[string]bool{b: true}
+	aQueue := []string{a}
+	bQueue := []string{b}
+
+	for len(aQueue) > 0 && len(bQueue) > 0 {
+		// Expand the shorter frontier first for efficiency.
+		if len(bQueue) < len(aQueue) {
+			aQueue, bQueue = bQueue, aQueue
+			aVisited, bVisited = bVisited, aVisited
+		}
+
+		nextAQueue := make([]string, 0, len(aQueue))
+		for _, commit := range aQueue {
+			// Check intersection before expanding.
+			if bVisited[commit] {
+				return commit
+			}
+			parent, ok := g.FirstParent(commit)
+			if !ok {
+				continue
+			}
+			if !g.Contains(parent) {
+				continue
+			}
+			if aVisited[parent] {
+				continue
+			}
+			aVisited[parent] = true
+			// Check intersection on the parent.
+			if bVisited[parent] {
+				return parent
+			}
+			nextAQueue = append(nextAQueue, parent)
+		}
+		aQueue = nextAQueue
+	}
+
+	return ""
 }
