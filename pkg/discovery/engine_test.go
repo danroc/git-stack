@@ -19,14 +19,12 @@ func initTestRepo(t *testing.T) *git.Client {
 	return git.NewClient(dir)
 }
 
-func newTestEngine(t *testing.T, g *git.Graph, baseBranch string) *Engine {
+func newTestEngine(t *testing.T, g *git.Graph, base string) *Engine {
 	t.Helper()
-	baseHead, _ := g.HeadOf(baseBranch)
 	return &Engine{
-		git:        initTestRepo(t),
-		baseBranch: baseBranch,
-		baseHead:   baseHead,
-		graph:      g,
+		git:   initTestRepo(t),
+		base:  base,
+		graph: g,
 	}
 }
 

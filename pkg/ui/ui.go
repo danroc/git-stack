@@ -17,6 +17,7 @@ type TreeEntry struct {
 	BranchName  string
 	AheadCount  int // relative to immediate parent; 0 for the root/base node
 	BehindCount int // behind relative to immediate parent; 0 for the root/base node
+	Drifted     bool
 	IsCurrent   bool
 	Children    []*TreeEntry
 }
@@ -97,6 +98,9 @@ func (p palette) formatEntry(e *TreeEntry) string {
 			s += fmt.Sprintf("%s-%d%s", p.behind, e.BehindCount, p.reset)
 		}
 		s += ")"
+	}
+	if e.Drifted {
+		s += " [drift]"
 	}
 	return s
 }

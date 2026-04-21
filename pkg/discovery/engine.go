@@ -24,33 +24,27 @@ type ChooseBranchFn func(action string, choices []string) (string, error)
 // Engine identifies stack lineage using a commit graph loaded once from git and then
 // queried in-process.
 type Engine struct {
-	baseBranch string
-	baseHead   string
-	git        *git.Client
-	graph      *git.Graph
+	base  string
+	git   *git.Client
+	graph *git.Graph
 }
 
 // NewEngine creates an engine that discovers stacks relative to baseBranch.
-func NewEngine(
-	g *git.Client,
-	baseBranch string,
-) (*Engine, error) {
+func NewEngine(g *git.Client, base string) (*Engine, error) {
 	graph, err := g.LoadGraph()
 	if err != nil {
 		return nil, fmt.Errorf("loading commit graph: %w", err)
 	}
-	baseHead, _ := graph.HeadOf(baseBranch)
 	return &Engine{
-		git:        g,
-		baseBranch: baseBranch,
-		baseHead:   baseHead,
-		graph:      graph,
+		base:  base,
+		git:   g,
+		graph: graph,
 	}, nil
 }
 
 // BaseBranch returns the base branch that anchors the bottom of every stack.
 func (e *Engine) BaseBranch() string {
-	return e.baseBranch
+	return e.base
 }
 
 // DetectBase returns the base branch by checking for well-known defaults.
@@ -123,47 +117,28 @@ func (e *Engine) DiscoverStack(
 // 2. otherwise infer a parent from the graph
 // 3. otherwise fall back to the base branch
 func (e *Engine) traceChainTo(target string) ([]Branch, error) {
-	baseHead, ok := e.graph.HeadOf(e.baseBranch)
-	if !ok {
-		return nil, fmt.Errorf("base branch %q not found in graph", e.baseBranch)
-	}
-	targetHead, ok := e.graph.HeadOf(target)
-	if !ok {
-		return nil, fmt.Errorf("branch %q not found in graph", target)
-	}
-
-	if target == e.baseBranch {
-		return []Branch{{Name: e.baseBranch, Head: baseHead}}, nil
-	}
-
-	seen := map[string]bool{}
-	chain := []Branch{{Name: target, Head: targetHead}}
-	for current := target; current != e.baseBranch; {
-		if seen[current] {
-			return nil, fmt.Errorf(
-				"cycle detected while resolving parent of %q",
-				current,
-			)
-		}
-		seen[current] = true
-
-		parent, err := e.resolveParent(current)
+	if target == e.base {
+		head, err := e.mustHeadOf(e.base)
 		if err != nil {
 			return nil, err
 		}
-		if parent == "" {
-			parent = e.baseBranch
+		return []Branch{{Name: e.base, Head: head}}, nil
+	}
+
+	head, err := e.mustHeadOf(target)
+	if err != nil {
+		return nil, err
+	}
+	chain := []Branch{{Name: target, Head: head}}
+	if err := e.walkResolvedParents(target, func(parent string) error {
+		head, err := e.mustHeadOf(parent)
+		if err != nil {
+			return err
 		}
-		parentHead, ok := e.graph.HeadOf(parent)
-		if !ok {
-			if parent == e.baseBranch {
-				parentHead = baseHead
-			} else {
-				return nil, fmt.Errorf("branch %q not found in graph", parent)
-			}
-		}
-		chain = append(chain, Branch{Name: parent, Head: parentHead})
-		current = parent
+		chain = append(chain, Branch{Name: parent, Head: head})
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
 	slices.Reverse(chain)
@@ -201,9 +176,9 @@ func (e *Engine) traceDescendants(
 // BuildTree constructs the full branch tree rooted at the base branch. Unlike
 // DiscoverStack, it never prompts, all descendants are included.
 func (e *Engine) BuildTree() *TreeNode {
-	baseHead, _ := e.graph.HeadOf(e.baseBranch)
+	baseHead, _ := e.graph.HeadOf(e.base)
 	root := &TreeNode{
-		Branch: Branch{Name: e.baseBranch, Head: baseHead},
+		Branch: Branch{Name: e.base, Head: baseHead},
 	}
 	e.buildChildren(root)
 	return root
@@ -229,28 +204,23 @@ func (e *Engine) buildChildren(node *TreeNode) {
 // Stored relationships are authoritative. The graph is only used to fill in branches
 // that do not have a stored parent, using a deterministic merge-base-based inference.
 func (e *Engine) directChildren(parent string) []string {
-	children := map[string]bool{}
+	var children []string
 	for _, branch := range e.graph.Branches() {
-		if branch == parent || branch == e.baseBranch {
+		if branch == parent || branch == e.base {
 			continue
 		}
 		resolvedParent, err := e.resolveParent(branch)
 		if err == nil && resolvedParent == parent {
-			children[branch] = true
+			children = append(children, branch)
 		}
 	}
-
-	result := make([]string, 0, len(children))
-	for branch := range children {
-		result = append(result, branch)
-	}
-	slices.Sort(result)
-	return result
+	slices.Sort(children)
+	return children
 }
 
 // Parent returns the immediate stack parent of branch.
 func (e *Engine) Parent(branch string) (string, error) {
-	if branch == e.baseBranch {
+	if branch == e.base {
 		return "", fmt.Errorf("branch %q has no parent in the stack", branch)
 	}
 	return e.resolveParent(branch)
@@ -262,21 +232,15 @@ func (e *Engine) IsBranchDescendant(ancestor, descendant string) bool {
 	if ancestor == descendant {
 		return false
 	}
-	visited := map[string]bool{descendant: true}
-	for current := descendant; ; {
-		if current == e.baseBranch {
-			return false
-		}
-		parent, err := e.resolveParent(current)
-		if err != nil || visited[parent] {
-			return false
-		}
+	found := false
+	err := e.walkResolvedParents(descendant, func(parent string) error {
 		if parent == ancestor {
-			return true
+			found = true
+			return errStopWalk
 		}
-		visited[parent] = true
-		current = parent
-	}
+		return nil
+	})
+	return found && err == errStopWalk
 }
 
 // SubtreeMembers returns all branches in the subtree rooted at branchName (excluding
@@ -301,12 +265,12 @@ func (e *Engine) SetParent(branch, parent string) error {
 	if err := e.git.SetStackParent(branch, parent); err != nil {
 		return err
 	}
-	branchHead, ok := e.graph.HeadOf(branch)
-	if !ok {
+	branchHead, err := e.mustHeadOf(branch)
+	if err != nil {
 		return nil
 	}
-	parentHead, ok := e.graph.HeadOf(parent)
-	if !ok {
+	parentHead, err := e.mustHeadOf(parent)
+	if err != nil {
 		return nil
 	}
 	base, ok := e.graph.MergeBase(branchHead, parentHead)
@@ -342,11 +306,46 @@ func collectSubtreeMembers(node *TreeNode, parent string, result *[]BranchWithPa
 	}
 }
 
-func (e *Engine) resolveParent(branch string) (string, error) {
-	if _, ok := e.graph.HeadOf(branch); !ok {
+var errStopWalk = fmt.Errorf("stop walk")
+
+func (e *Engine) walkResolvedParents(
+	branch string,
+	visit func(parent string) error,
+) error {
+	seen := map[string]bool{branch: true}
+	for current := branch; current != e.base; {
+		parent, err := e.resolveParent(current)
+		if err != nil {
+			return err
+		}
+		if parent == "" {
+			parent = e.base
+		}
+		if seen[parent] {
+			return fmt.Errorf("cycle detected while resolving parent of %q", current)
+		}
+		if err := visit(parent); err != nil {
+			return err
+		}
+		seen[parent] = true
+		current = parent
+	}
+	return nil
+}
+
+func (e *Engine) mustHeadOf(branch string) (string, error) {
+	head, ok := e.graph.HeadOf(branch)
+	if !ok {
 		return "", fmt.Errorf("branch %q not found in graph", branch)
 	}
-	if branch == e.baseBranch {
+	return head, nil
+}
+
+func (e *Engine) resolveParent(branch string) (string, error) {
+	if _, err := e.mustHeadOf(branch); err != nil {
+		return "", err
+	}
+	if branch == e.base {
 		return "", fmt.Errorf("branch %q has no parent in the stack", branch)
 	}
 	if parent, ok := e.git.GetStackParent(branch); ok {
@@ -355,7 +354,7 @@ func (e *Engine) resolveParent(branch string) (string, error) {
 	if parent, ok := e.inferParent(branch); ok {
 		return parent, nil
 	}
-	return e.baseBranch, nil
+	return e.base, nil
 }
 
 func (e *Engine) inferParent(branch string) (string, bool) {

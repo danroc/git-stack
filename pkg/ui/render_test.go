@@ -25,6 +25,21 @@ func TestFormatEntry(t *testing.T) {
 			&TreeEntry{BranchName: "feat-1", BehindCount: 2},
 			"feat-1 (-2)",
 		},
+		{
+			"drift marker",
+			&TreeEntry{BranchName: "feat-1", Drifted: true},
+			"feat-1 [drift]",
+		},
+		{
+			"counts and drift",
+			&TreeEntry{
+				BranchName:  "feat-1",
+				AheadCount:  3,
+				BehindCount: 2,
+				Drifted:     true,
+			},
+			"feat-1 (+3 -2) [drift]",
+		},
 		{"current branch", &TreeEntry{BranchName: "feat-1", IsCurrent: true}, "feat-1"},
 	}
 	for _, tt := range tests {
@@ -50,6 +65,21 @@ func TestRenderTree_LinearStack(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("output missing %q:\n%s", want, got)
 		}
+	}
+}
+
+func TestRenderTree_DriftedBranch(t *testing.T) {
+	root := &TreeEntry{
+		BranchName: "main",
+		Children: []*TreeEntry{
+			{BranchName: "feat-1", Drifted: true},
+		},
+	}
+
+	var buf bytes.Buffer
+	RenderTree(root, &buf)
+	if got := buf.String(); !strings.Contains(got, "[drift]") {
+		t.Fatalf("output missing drift marker:\n%s", got)
 	}
 }
 

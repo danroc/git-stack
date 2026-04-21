@@ -28,7 +28,6 @@ func main() {
 
 	root.AddCommand(
 		cmdAdd(),
-		cmdParent(),
 		cmdMove(),
 		cmdView(),
 		cmdPush(),
@@ -123,28 +122,6 @@ func cmdAdd() *cobra.Command {
 	}
 }
 
-func cmdParent() *cobra.Command {
-	return &cobra.Command{
-		Use:   "parent [branch] <parent>",
-		Short: "Set the parent of a branch (defaults to current branch)",
-		Args:  cobra.RangeArgs(1, 2),
-		RunE: func(_ *cobra.Command, args []string) error {
-			g := git.NewClient(".")
-			var branch, parent string
-			if len(args) == 1 {
-				current, err := g.CurrentBranch()
-				if err != nil {
-					return err
-				}
-				branch, parent = current, args[0]
-			} else {
-				branch, parent = args[0], args[1]
-			}
-			return g.RecordStackParent(branch, parent)
-		},
-	}
-}
-
 func cmdView() *cobra.Command {
 	return &cobra.Command{
 		Use:   "view",
@@ -175,6 +152,7 @@ func buildDisplayTree(node *discovery.TreeNode, current string) *ui.TreeEntry {
 		BranchName:  node.Branch.Name,
 		AheadCount:  node.AheadCount,
 		BehindCount: node.BehindCount,
+		Drifted:     node.Drifted,
 		IsCurrent:   node.Branch.Name == current,
 	}
 	for _, child := range node.Children {
