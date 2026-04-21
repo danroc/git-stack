@@ -160,7 +160,7 @@ func (g *Graph) HeadOf(branch string) (string, bool) {
 }
 
 // BranchesAt returns all branches whose HEAD is at hash, sorted alphabetically. The
-// returned slice is a copy; callers may modify it freely.
+// returned slice is a copy.
 func (g *Graph) BranchesAt(hash string) []string {
 	branches := g.branchesAt[hash]
 	return slices.Clone(branches)
@@ -169,6 +169,11 @@ func (g *Graph) BranchesAt(hash string) []string {
 // Branches returns all local branch names known to the graph, sorted alphabetically.
 func (g *Graph) Branches() []string {
 	return slices.Sorted(maps.Keys(g.heads))
+}
+
+// ParentsOf returns the parent hashes of hash in order. The returned slice is a copy.
+func (g *Graph) ParentsOf(hash string) []string {
+	return slices.Clone(g.parents[hash])
 }
 
 // FirstParent returns the first parent of hash.
