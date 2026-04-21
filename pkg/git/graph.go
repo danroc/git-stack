@@ -200,8 +200,8 @@ func (g *Graph) IsAncestor(ancestorHash, descendantHash string) bool {
 // If no common ancestor exists on the first-parent chains, the result has both counts
 // set to zero.
 func (g *Graph) CommitsBetween(a, b string) CommitsBetweenResult {
-	commonAncestor := g.closestCommonAncestor(a, b)
-	if commonAncestor == "" {
+	commonAncestor, ok := g.closestCommonAncestor(a, b)
+	if !ok {
 		return CommitsBetweenResult{}
 	}
 
@@ -233,7 +233,7 @@ func (g *Graph) countStepsToAncestor(hash, target string) int {
 //
 // Because it follows only first-parent chains, it may miss a common ancestor that is
 // only reachable via a non-first parent (e.g. the second parent of a merge commit).
-func (g *Graph) closestCommonAncestor(a, b string) string {
+func (g *Graph) closestCommonAncestor(a, b string) (string, bool) {
 	// Collect all first-parent ancestors of a (including a itself).
 	aAncestors := map[string]bool{a: true}
 	for hash := a; ; {
@@ -249,7 +249,7 @@ func (g *Graph) closestCommonAncestor(a, b string) string {
 	// common ancestor.
 	for hash := b; ; {
 		if aAncestors[hash] {
-			return hash
+			return hash, true
 		}
 		parent, ok := g.FirstParent(hash)
 		if !ok {
@@ -258,5 +258,5 @@ func (g *Graph) closestCommonAncestor(a, b string) string {
 		hash = parent
 	}
 
-	return ""
+	return "", false
 }
