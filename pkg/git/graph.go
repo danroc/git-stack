@@ -200,8 +200,6 @@ func (g *Graph) IsAncestor(ancestorHash, descendantHash string) bool {
 // If no common ancestor exists on the first-parent chains, the result has both counts
 // set to zero.
 func (g *Graph) CommitsBetween(a, b string) CommitsBetweenResult {
-	// Find the closest common ancestor via bidirectional BFS on first-parent chains
-	// only.
 	commonAncestor := g.closestCommonAncestor(a, b)
 	if commonAncestor == "" {
 		return CommitsBetweenResult{}
@@ -228,25 +226,19 @@ func (g *Graph) countStepsToAncestor(hash, target string) int {
 	return count
 }
 
-// closestCommonAncestor finds the nearest commit reachable from both a and b by walking
-// first-parent chains only.
+// closestCommonAncestor returns the closest commit reachable from both a and b along
+// their first-parent chains, or "" if the chains share no common commit. It first
+// collects all commits on a's chain into a set, then walks b's chain until it finds a
+// hit.
 //
-// Because it follows only first-parent chains, it may return "" when two branches share
-// a common ancestor in the full DAG but neither first-parent chain reaches it (e.g.,
-// both branches are descendants of a merge commit).
+// Because it follows only first-parent chains, it may miss a common ancestor that is
+// only reachable via a non-first parent (e.g. the second parent of a merge commit).
 func (g *Graph) closestCommonAncestor(a, b string) string {
-	if a == b {
-		return a
-	}
-
 	// Collect all first-parent ancestors of a (including a itself).
 	aAncestors := map[string]bool{a: true}
 	for hash := a; ; {
 		parent, ok := g.FirstParent(hash)
 		if !ok {
-			break
-		}
-		if aAncestors[parent] {
 			break
 		}
 		aAncestors[parent] = true
