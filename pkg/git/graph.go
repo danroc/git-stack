@@ -17,9 +17,8 @@ type Graph struct {
 	branchAt map[string][]string // commit_hash → branch_names (sorted)
 }
 
-// LoadGraph builds the commit graph for all local branches. The graph floor is
-// the octopus merge-base of every branch head — commits at and above the floor
-// are loaded.
+// LoadGraph builds the commit graph for all local branches. The graph floor is the
+// octopus merge-base of every branch head — commits at and above the floor are loaded.
 func (g *Client) LoadGraph() (*Graph, error) {
 	heads, err := g.listBranchHeads()
 	if err != nil {
@@ -76,8 +75,8 @@ func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 		return nil, fmt.Errorf("computing graph floor: %w", err)
 	}
 
-	// Determine whether the floor has a parent to anchor ^<floor>^. A root commit
-	// has no parents, in which case we drop the exclusion.
+	// Determine whether the floor has a parent to anchor ^<floor>^. A root commit has
+	// no parents, in which case we drop the exclusion.
 	hasParent, err := g.commitHasParent(floor)
 	if err != nil {
 		return nil, fmt.Errorf("inspecting floor parent: %w", err)
@@ -105,8 +104,8 @@ func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 	return graph, nil
 }
 
-// NewGraph constructs a Graph from raw commit data. When two branches share a
-// HEAD, both are retained in branchAt at that commit, sorted alphabetically.
+// NewGraph constructs a Graph from raw commit data. When two branches share a HEAD,
+// both are retained in branchAt at that commit, sorted alphabetically.
 func NewGraph(parents map[string][]string, heads map[string]string) *Graph {
 	branchAt := make(map[string][]string, len(heads))
 	for branch, hash := range heads {
@@ -118,15 +117,15 @@ func NewGraph(parents map[string][]string, heads map[string]string) *Graph {
 	return &Graph{parents: parents, heads: heads, branchAt: branchAt}
 }
 
-// CommitsBetweenResult holds the count of commits ahead and behind
-// two branches, relative to their closest common ancestor.
+// CommitsBetweenResult holds the count of commits ahead and behind two branches,
+// relative to their closest common ancestor.
 type CommitsBetweenResult struct {
 	Ahead  int
 	Behind int
 }
 
-// Contains reports whether hash is in the loaded graph (at or above the floor
-// commit — the octopus merge-base of all branch heads).
+// Contains reports whether hash is in the loaded graph (at or above the floor commit —
+// the octopus merge-base of all branch heads).
 func (g *Graph) Contains(hash string) bool {
 	_, ok := g.parents[hash]
 	return ok
@@ -138,9 +137,9 @@ func (g *Graph) HeadOf(branch string) (string, bool) {
 	return h, ok
 }
 
-// BranchAt returns all branches whose HEAD is at hash, sorted alphabetically.
-// Returns (nil, false) when no branch points at hash. The returned slice is a
-// copy; callers may modify it freely.
+// BranchAt returns all branches whose HEAD is at hash, sorted alphabetically. Returns
+// (nil, false) when no branch points at hash. The returned slice is a copy; callers may
+// modify it freely.
 func (g *Graph) BranchAt(hash string) ([]string, bool) {
 	branches, ok := g.branchAt[hash]
 	if !ok {
@@ -190,18 +189,17 @@ func (g *Graph) IsAncestor(ancestorHash, descendantHash string) bool {
 	return false
 }
 
-// CommitsBetween returns the number of commits between a and b relative to
-// their closest common ancestor in the graph, as measured along first-parent
-// chains only.
+// CommitsBetween returns the number of commits between a and b relative to their
+// closest common ancestor in the graph, as measured along first-parent chains only.
 //
-// Ahead is the first-parent chain distance from the common ancestor to a.
-// Behind is the first-parent chain distance from the common ancestor to b.
+// Ahead is the first-parent chain distance from the common ancestor to a. Behind is the
+// first-parent chain distance from the common ancestor to b.
 //
-// If no common ancestor exists on the first-parent chains, the result has
-// both counts set to zero.
+// If no common ancestor exists on the first-parent chains, the result has both counts
+// set to zero.
 func (g *Graph) CommitsBetween(a, b string) CommitsBetweenResult {
-	// Find the closest common ancestor via bidirectional BFS on first-parent
-	// chains only.
+	// Find the closest common ancestor via bidirectional BFS on first-parent chains
+	// only.
 	commonAncestor := g.closestCommonAncestor(a, b)
 	if commonAncestor == "" {
 		return CommitsBetweenResult{}
@@ -213,8 +211,8 @@ func (g *Graph) CommitsBetween(a, b string) CommitsBetweenResult {
 	}
 }
 
-// countStepsToAncestor counts the number of first-parent steps from hash
-// up to (but not including) target along the first-parent chain.
+// countStepsToAncestor counts the number of first-parent steps from hash up to (but not
+// including) target along the first-parent chain.
 func (g *Graph) countStepsToAncestor(hash, target string) int {
 	var count int
 	for g.Contains(hash) && hash != target {
@@ -228,12 +226,12 @@ func (g *Graph) countStepsToAncestor(hash, target string) int {
 	return count
 }
 
-// closestCommonAncestor finds the nearest commit reachable from both a and b
-// by walking first-parent chains only.
+// closestCommonAncestor finds the nearest commit reachable from both a and b by walking
+// first-parent chains only.
 //
-// Because it follows only first-parent chains, it may return "" when two
-// branches share a common ancestor in the full DAG but neither first-parent
-// chain reaches it (e.g., both branches are descendants of a merge commit).
+// Because it follows only first-parent chains, it may return "" when two branches share
+// a common ancestor in the full DAG but neither first-parent chain reaches it (e.g.,
+// both branches are descendants of a merge commit).
 func (g *Graph) closestCommonAncestor(a, b string) string {
 	if a == b {
 		return a
@@ -256,8 +254,8 @@ func (g *Graph) closestCommonAncestor(a, b string) string {
 		hash = parent
 	}
 
-	// Walk first-parent chain from b; the first node found in aAncestors
-	// is the closest common ancestor.
+	// Walk first-parent chain from b; the first node found in aAncestors is the closest
+	// common ancestor.
 	for hash := b; ; {
 		if aAncestors[hash] {
 			return hash
