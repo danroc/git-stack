@@ -170,19 +170,23 @@ func (g *Graph) IsAncestor(ancestorHash, descendantHash string) bool {
 		return true
 	}
 
-	visited := make(map[string]bool)
-	queue := []string{descendantHash}
+	var (
+		visited = map[string]bool{descendantHash: true}
+		queue   = []string{descendantHash}
+	)
 	for len(queue) > 0 {
 		next := queue[0]
 		queue = queue[1:]
-		if visited[next] {
-			continue
-		}
 		if next == ancestorHash {
 			return true
 		}
-		visited[next] = true
-		queue = append(queue, g.parents[next]...)
+		for _, p := range g.parents[next] {
+			// Mark visited before enqueuing, duplicates never enter the queue.
+			if !visited[p] {
+				visited[p] = true
+				queue = append(queue, p)
+			}
+		}
 	}
 	return false
 }
