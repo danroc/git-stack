@@ -165,13 +165,7 @@ func cmdPush() *cobra.Command {
 	return &cobra.Command{
 		Use:   "push",
 		Short: "Push all branches in the stack to their upstreams",
-		RunE: runStackCmd(func(s *stack.Stack) error {
-			err := s.Push(stepPrinter(os.Stdout, "Pushing"))
-			if err != nil {
-				printGitStderr(err)
-			}
-			return err
-		}),
+		RunE:  stackRunE("Pushing", (*stack.Stack).Push),
 	}
 }
 
@@ -179,13 +173,7 @@ func cmdPull() *cobra.Command {
 	return &cobra.Command{
 		Use:   "pull",
 		Short: "Pull all branches in the stack from their upstreams",
-		RunE: runStackCmd(func(s *stack.Stack) error {
-			err := s.Pull(stepPrinter(os.Stdout, "Pulling"))
-			if err != nil {
-				printGitStderr(err)
-			}
-			return err
-		}),
+		RunE:  stackRunE("Pulling", (*stack.Stack).Pull),
 	}
 }
 
@@ -193,14 +181,23 @@ func cmdRebase() *cobra.Command {
 	return &cobra.Command{
 		Use:   "rebase",
 		Short: "Rebase each branch in the stack onto the tip of its parent, bottom-to-top",
-		RunE: runStackCmd(func(s *stack.Stack) error {
-			err := s.Rebase(stepPrinter(os.Stdout, "Rebasing"))
-			if err != nil {
-				printGitStderr(err)
-			}
-			return err
-		}),
+		RunE:  stackRunE("Rebasing", (*stack.Stack).Rebase),
 	}
+}
+
+// stackRunE builds a RunE that resolves the stack, calls method with a step printer,
+// and prints git stderr on failure.
+func stackRunE(
+	verb string,
+	method func(*stack.Stack, stack.NotifyFn) error,
+) func(*cobra.Command, []string) error {
+	return runStackCmd(func(s *stack.Stack) error {
+		err := method(s, stepPrinter(os.Stdout, verb))
+		if err != nil {
+			printGitStderr(err)
+		}
+		return err
+	})
 }
 
 func cmdMove() *cobra.Command {
@@ -217,16 +214,18 @@ func cmdMove() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			var branch, newParent string
-			if len(args) == 1 {
+			if len(args) == 2 {
+				branch, newParent = args[0], args[1]
+			} else {
+				newParent = args[0]
 				branch, err = g.CurrentBranch()
 				if err != nil {
 					return err
 				}
-				newParent = args[0]
-			} else {
-				branch, newParent = args[0], args[1]
 			}
+
 			err = s.Move(branch, newParent, stepPrinter(os.Stdout, "Rebasing"))
 			if err != nil {
 				printGitStderr(err)
