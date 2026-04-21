@@ -113,10 +113,16 @@ func NewGraph(parents map[string][]string, heads map[string]string) *Graph {
 	for branch, hash := range heads {
 		branchAt[hash] = append(branchAt[hash], branch)
 	}
+
 	for _, names := range branchAt {
 		slices.Sort(names)
 	}
-	return &Graph{parents: parents, heads: heads, branchAt: branchAt}
+
+	return &Graph{
+		parents:  parents,
+		heads:    heads,
+		branchAt: branchAt,
+	}
 }
 
 // CommitsBetweenResult holds the count of commits ahead and behind two branches,
