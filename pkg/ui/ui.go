@@ -14,11 +14,11 @@ import (
 
 // TreeEntry is the display-layer input for RenderTree.
 type TreeEntry struct {
-	BranchName string
+	BranchName  string
 	AheadCount  int // relative to immediate parent; 0 for the root/base node
 	BehindCount int // behind relative to immediate parent; 0 for the root/base node
 	IsCurrent   bool
-	Children   []*TreeEntry
+	Children    []*TreeEntry
 }
 
 // writer wraps an io.Writer and absorbs write errors after the first failure.

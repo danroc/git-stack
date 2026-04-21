@@ -15,8 +15,16 @@ func TestFormatEntry(t *testing.T) {
 	}{
 		{"plain", &TreeEntry{BranchName: "main"}, "main"},
 		{"ahead count", &TreeEntry{BranchName: "feat-1", AheadCount: 3}, "feat-1 (+3)"},
-		{"ahead and behind", &TreeEntry{BranchName: "feat-1", AheadCount: 3, BehindCount: 2}, "feat-1 (+3 -2)"},
-		{"behind only", &TreeEntry{BranchName: "feat-1", BehindCount: 2}, "feat-1 (-2)"},
+		{
+			"ahead and behind",
+			&TreeEntry{BranchName: "feat-1", AheadCount: 3, BehindCount: 2},
+			"feat-1 (+3 -2)",
+		},
+		{
+			"behind only",
+			&TreeEntry{BranchName: "feat-1", BehindCount: 2},
+			"feat-1 (-2)",
+		},
 		{"current branch", &TreeEntry{BranchName: "feat-1", IsCurrent: true}, "feat-1"},
 	}
 	for _, tt := range tests {

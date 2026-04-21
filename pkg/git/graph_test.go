@@ -160,16 +160,36 @@ func TestGraph_IsAncestor(t *testing.T) {
 func TestGraph_CommitsBetween(t *testing.T) {
 	g := linearGraph()
 	tests := []struct {
-		name     string
-		branch   string
-		parent   string
-		want     CommitsBetweenResult
+		name   string
+		branch string
+		parent string
+		want   CommitsBetweenResult
 	}{
-		{"one ahead, zero behind", "c1", "c0", CommitsBetweenResult{Ahead: 1, Behind: 0}},
-		{"one behind, zero ahead", "c0", "c1", CommitsBetweenResult{Ahead: 0, Behind: 1}},
-		{"two ahead, zero behind", "c2", "c0", CommitsBetweenResult{Ahead: 2, Behind: 0}},
+		{
+			"one ahead, zero behind",
+			"c1",
+			"c0",
+			CommitsBetweenResult{Ahead: 1, Behind: 0},
+		},
+		{
+			"one behind, zero ahead",
+			"c0",
+			"c1",
+			CommitsBetweenResult{Ahead: 0, Behind: 1},
+		},
+		{
+			"two ahead, zero behind",
+			"c2",
+			"c0",
+			CommitsBetweenResult{Ahead: 2, Behind: 0},
+		},
 		{"same commit", "c2", "c2", CommitsBetweenResult{Ahead: 0, Behind: 0}},
-		{"c1 vs c2 (c1 ancestor of c2)", "c1", "c2", CommitsBetweenResult{Ahead: 0, Behind: 1}},
+		{
+			"c1 vs c2 (c1 ancestor of c2)",
+			"c1",
+			"c2",
+			CommitsBetweenResult{Ahead: 0, Behind: 1},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -197,16 +217,36 @@ func TestGraph_CommitsBetween_Divergent(t *testing.T) {
 		},
 	)
 	tests := []struct {
-		name   string
-		a      string
-		b      string
-		want   CommitsBetweenResult
+		name string
+		a    string
+		b    string
+		want CommitsBetweenResult
 	}{
 		{"same branch", "c0", "c0", CommitsBetweenResult{Ahead: 0, Behind: 0}},
-		{"main-dev vs main: 2 ahead, 0 behind", "c2", "c0", CommitsBetweenResult{Ahead: 2, Behind: 0}},
-		{"feat vs main: 2 ahead, 0 behind", "c4", "c0", CommitsBetweenResult{Ahead: 2, Behind: 0}},
-		{"main-dev vs feat: 2 ahead, 2 behind", "c2", "c4", CommitsBetweenResult{Ahead: 2, Behind: 2}},
-		{"feat vs main-dev: 2 ahead, 2 behind", "c4", "c2", CommitsBetweenResult{Ahead: 2, Behind: 2}},
+		{
+			"main-dev vs main: 2 ahead, 0 behind",
+			"c2",
+			"c0",
+			CommitsBetweenResult{Ahead: 2, Behind: 0},
+		},
+		{
+			"feat vs main: 2 ahead, 0 behind",
+			"c4",
+			"c0",
+			CommitsBetweenResult{Ahead: 2, Behind: 0},
+		},
+		{
+			"main-dev vs feat: 2 ahead, 2 behind",
+			"c2",
+			"c4",
+			CommitsBetweenResult{Ahead: 2, Behind: 2},
+		},
+		{
+			"feat vs main-dev: 2 ahead, 2 behind",
+			"c4",
+			"c2",
+			CommitsBetweenResult{Ahead: 2, Behind: 2},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
