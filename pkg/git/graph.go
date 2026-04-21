@@ -40,7 +40,6 @@ func (g *Client) listBranchHeads() (map[string]string, error) {
 	heads := make(map[string]string)
 	scanner := bufio.NewScanner(strings.NewReader(out))
 	for scanner.Scan() {
-		// Each line is "<branch-name> <commit-hash>"
 		parts := strings.Fields(scanner.Text())
 		if len(parts) != 2 {
 			continue
