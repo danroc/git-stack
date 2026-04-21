@@ -123,19 +123,19 @@ func parseParentLines(out string) (map[string][]string, error) {
 // NewGraph constructs a Graph from raw commit data. When two branches share a HEAD,
 // both are retained in branchAt at that commit, sorted alphabetically.
 func NewGraph(parents map[string][]string, heads map[string]string) *Graph {
-	branchAt := make(map[string][]string, len(heads))
+	branchesAt := make(map[string][]string, len(heads))
 	for branch, hash := range heads {
-		branchAt[hash] = append(branchAt[hash], branch)
+		branchesAt[hash] = append(branchesAt[hash], branch)
 	}
 
-	for _, names := range branchAt {
+	for _, names := range branchesAt {
 		slices.Sort(names)
 	}
 
 	return &Graph{
 		parents:    parents,
 		heads:      heads,
-		branchesAt: branchAt,
+		branchesAt: branchesAt,
 	}
 }
 
