@@ -365,9 +365,9 @@ func (e *Engine) graphAboveSet(parent, parentHead string) map[string]bool {
 // filterSiblingConfig removes branches whose config parent is a sibling in the
 // above-set and the branch is genuinely diverged from that sibling.
 //
-// When a parent advances past a child (e.g., A is pushed while B was its child),
-// B's config parent remains A but the graph no longer shows B above A. Without
-// this filter, main would claim both A and B as children, corrupting the stack.
+// When a parent advances past a child (e.g., A is pushed while B was its child), B's
+// config parent remains A but the graph no longer shows B above A. Without this filter,
+// main would claim both A and B as children, corrupting the stack.
 func (e *Engine) filterSiblingConfig(
 	above map[string]bool,
 	parent string,
@@ -391,12 +391,12 @@ func (e *Engine) filterSiblingConfig(
 	return result
 }
 
-// filterCoLocated demotes branches whose stackParent config names a co-located
-// sibling in the above-set.
+// filterCoLocated demotes branches whose stackParent config names a co-located sibling
+// in the above-set.
 //
-// When two branches share a HEAD and one declares the other as its parent, the
-// declared child should not be a direct child of the shared parent — it belongs
-// under its config parent.
+// When two branches share a HEAD and one declares the other as its parent, the declared
+// child should not be a direct child of the shared parent — it belongs under its config
+// parent.
 func (e *Engine) filterCoLocated(above map[string]bool) map[string]bool {
 	result := make(map[string]bool)
 	for b := range above {
@@ -423,8 +423,8 @@ func (e *Engine) filterCoLocated(above map[string]bool) map[string]bool {
 	return result
 }
 
-// filterGraphDirect drops candidates where another branch sits strictly between
-// parent and the candidate.
+// filterGraphDirect drops candidates where another branch sits strictly between parent
+// and the candidate.
 func (e *Engine) filterGraphDirect(
 	above map[string]bool,
 	parent string,
@@ -455,11 +455,11 @@ func (e *Engine) filterGraphDirect(
 	return direct
 }
 
-// filterCoLocatedAbove removes candidates whose co-located owner is not the
-// current parent.
+// filterCoLocatedAbove removes candidates whose co-located owner is not the current
+// parent.
 //
-// When a candidate sits above multiple branches sharing the same HEAD, only the
-// owner (determined by config or alphabetical order) should claim it.
+// When a candidate sits above multiple branches sharing the same HEAD, only the owner
+// (determined by config or alphabetical order) should claim it.
 func (e *Engine) filterCoLocatedAbove(
 	direct map[string]bool,
 	parent string,
@@ -480,13 +480,13 @@ func (e *Engine) filterCoLocatedAbove(
 	return result
 }
 
-// recoverDiverged adds branches whose stackParent config names parent but that
-// are not in the direct set and have no branch ancestor in the graph.
+// recoverDiverged adds branches whose stackParent config names parent but that are not
+// in the direct set and have no branch ancestor in the graph.
 //
-// This handles the case where a parent advances past a child. The child's config
-// parent remains the original parent, but the graph no longer shows the child
-// above it. We claim it via config only when the child is genuinely diverged
-// (no other branch sits between it and base).
+// This handles the case where a parent advances past a child. The child's config parent
+// remains the original parent, but the graph no longer shows the child above it. We
+// claim it via config only when the child is genuinely diverged (no other branch sits
+// between it and base).
 func (e *Engine) recoverDiverged(
 	direct map[string]bool,
 	parent string,
@@ -503,12 +503,12 @@ func (e *Engine) recoverDiverged(
 	return direct
 }
 
-// persistChildren writes stackParent config for each child, skipping branches
-// whose config points to a diverged sibling.
+// persistChildren writes stackParent config for each child, skipping branches whose
+// config points to a diverged sibling.
 //
 // When a parent advances past a child, the child's config parent is the original
-// parent. Overwriting it would corrupt the divergence claim and cause the child
-// to appear under the wrong parent in subsequent view calls.
+// parent. Overwriting it would corrupt the divergence claim and cause the child to
+// appear under the wrong parent in subsequent view calls.
 func (e *Engine) persistChildren(children []string, parent, parentHead string) {
 	for _, child := range children {
 		if existingParent, ok := e.git.GetStackParent(
