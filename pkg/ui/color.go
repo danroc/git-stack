@@ -8,6 +8,7 @@ const (
 	dim    = "\033[2m"
 	green  = "\033[32m"
 	yellow = "\033[33m"
+	red    = "\033[31m"
 )
 
 // palette holds ANSI escape sequences for each semantic element.
@@ -24,7 +25,7 @@ func colorPalette() palette {
 	return palette{
 		branch:    bold + green,
 		ahead:     yellow,
-		behind:    yellow,
+		behind:    red,
 		connector: dim,
 		reset:     reset,
 	}

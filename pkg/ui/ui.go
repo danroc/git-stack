@@ -86,14 +86,17 @@ func (p palette) formatEntry(e *TreeEntry) string {
 		s = p.branch + s + p.reset
 	}
 	if e.AheadCount > 0 || e.BehindCount > 0 {
-		var parts []string
+		s += " ("
 		if e.AheadCount > 0 {
-			parts = append(parts, fmt.Sprintf("%s+%d%s", p.ahead, e.AheadCount, p.reset))
+			s += fmt.Sprintf("%s+%d%s", p.ahead, e.AheadCount, p.reset)
 		}
 		if e.BehindCount > 0 {
-			parts = append(parts, fmt.Sprintf("%s-%d%s", p.behind, e.BehindCount, p.reset))
+			if e.AheadCount > 0 {
+				s += " "
+			}
+			s += fmt.Sprintf("%s-%d%s", p.behind, e.BehindCount, p.reset)
 		}
-		s += fmt.Sprintf(" (%s)", strings.Join(parts, "/"))
+		s += ")"
 	}
 	return s
 }
