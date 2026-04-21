@@ -235,8 +235,7 @@ func (g *Graph) CommitsBetween(a, b string) CommitsBetweenResult {
 }
 
 // closestCommonAncestor finds the nearest commit reachable from both a and b
-// by walking first-parent chains only. It uses bidirectional BFS to minimize
-// the number of graph nodes visited.
+// by walking first-parent chains only.
 //
 // Because it follows only first-parent chains, it may return "" when two
 // branches share a common ancestor in the full DAG but neither first-parent
@@ -246,42 +245,37 @@ func (g *Graph) closestCommonAncestor(a, b string) string {
 		return a
 	}
 
-	aVisited := map[string]bool{a: true}
-	bVisited := map[string]bool{b: true}
-	aQueue := []string{a}
-	bQueue := []string{b}
-
-	for len(aQueue) > 0 && len(bQueue) > 0 {
-		// Expand the shorter frontier first for efficiency.
-		if len(bQueue) < len(aQueue) {
-			aQueue, bQueue = bQueue, aQueue
-			aVisited, bVisited = bVisited, aVisited
+	// Collect all first-parent ancestors of a (including a itself).
+	aAncestors := map[string]bool{a: true}
+	for hash := a; ; {
+		parent, ok := g.FirstParent(hash)
+		if !ok {
+			break
 		}
-
-		nextAQueue := make([]string, 0, len(aQueue))
-		for _, commit := range aQueue {
-			// Check intersection before expanding.
-			if bVisited[commit] {
-				return commit
-			}
-			parent, ok := g.FirstParent(commit)
-			if !ok {
-				continue
-			}
-			if !g.Contains(parent) {
-				continue
-			}
-			if aVisited[parent] {
-				continue
-			}
-			aVisited[parent] = true
-			// Check intersection on the parent.
-			if bVisited[parent] {
-				return parent
-			}
-			nextAQueue = append(nextAQueue, parent)
+		if !g.Contains(parent) {
+			break
 		}
-		aQueue = nextAQueue
+		if aAncestors[parent] {
+			break
+		}
+		aAncestors[parent] = true
+		hash = parent
+	}
+
+	// Walk first-parent chain from b; the first node found in aAncestors
+	// is the closest common ancestor.
+	for hash := b; ; {
+		if aAncestors[hash] {
+			return hash
+		}
+		parent, ok := g.FirstParent(hash)
+		if !ok {
+			break
+		}
+		if !g.Contains(parent) {
+			break
+		}
+		hash = parent
 	}
 
 	return ""
