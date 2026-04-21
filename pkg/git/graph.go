@@ -101,6 +101,8 @@ func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 		}
 		graph.parents[parts[0]] = parts[1:]
 	}
+	graph.parents[floor] = nil
+
 	return graph, nil
 }
 
@@ -180,11 +182,7 @@ func (g *Graph) IsAncestor(ancestorHash, descendantHash string) bool {
 			return true
 		}
 		visited[next] = true
-		for _, parent := range g.parents[next] {
-			if g.Contains(parent) {
-				queue = append(queue, parent)
-			}
-		}
+		queue = append(queue, g.parents[next]...)
 	}
 	return false
 }
@@ -215,7 +213,7 @@ func (g *Graph) CommitsBetween(a, b string) CommitsBetweenResult {
 // including) target along the first-parent chain.
 func (g *Graph) countStepsToAncestor(hash, target string) int {
 	var count int
-	for g.Contains(hash) && hash != target {
+	for hash != target {
 		parent, ok := g.FirstParent(hash)
 		if !ok {
 			break
@@ -244,9 +242,6 @@ func (g *Graph) closestCommonAncestor(a, b string) string {
 		if !ok {
 			break
 		}
-		if !g.Contains(parent) {
-			break
-		}
 		if aAncestors[parent] {
 			break
 		}
@@ -262,9 +257,6 @@ func (g *Graph) closestCommonAncestor(a, b string) string {
 		}
 		parent, ok := g.FirstParent(hash)
 		if !ok {
-			break
-		}
-		if !g.Contains(parent) {
 			break
 		}
 		hash = parent
