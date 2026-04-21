@@ -42,16 +42,12 @@ func (g *Client) listBranchHeads() (map[string]string, error) {
 
 	for scanner.Scan() {
 		name, hash, ok := strings.Cut(scanner.Text(), " ")
-		if !ok {
-			continue
+		if ok {
+			heads[name] = hash
 		}
-		heads[name] = hash
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
 	}
 
-	return heads, nil
+	return heads, scanner.Err()
 }
 
 func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
@@ -113,20 +109,15 @@ func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 
 func parseParentLines(out string) (map[string][]string, error) {
 	parents := make(map[string][]string)
-
 	scanner := bufio.NewScanner(strings.NewReader(out))
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
-		if len(fields) == 0 {
-			continue
+		if len(fields) > 0 {
+			parents[fields[0]] = fields[1:]
 		}
-		parents[fields[0]] = fields[1:]
 	}
 
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return parents, nil
+	return parents, scanner.Err()
 }
 
 // NewGraph constructs a Graph from raw commit data. When two branches share a HEAD,
@@ -179,44 +170,44 @@ func (g *Graph) BranchAt(hash string) ([]string, bool) {
 	return slices.Clone(branches), true
 }
 
-// Branches returns all local branch names known to the graph, sorted alphabetically.
-func (g *Graph) Branches() []string {
+// AllBranches returns all local branch names known to the graph, sorted alphabetically.
+func (g *Graph) AllBranches() []string {
 	return slices.Sorted(maps.Keys(g.heads))
 }
 
 // FirstParent returns the first parent of hash.
 func (g *Graph) FirstParent(hash string) (string, bool) {
-	parents, ok := g.parents[hash]
-	if !ok || len(parents) == 0 {
+	ps := g.parents[hash]
+	if len(ps) == 0 {
 		return "", false
 	}
-	return parents[0], true
+	return ps[0], true
 }
 
-// IsAncestor reports whether ancestorHash is reachable from descendantHash.
-func (g *Graph) IsAncestor(ancestorHash, descendantHash string) bool {
-	if ancestorHash == descendantHash {
+// IsAncestor reports whether ancestor is reachable from descendant.
+func (g *Graph) IsAncestor(ancestor, descendant string) bool {
+	if ancestor == descendant {
 		return true
 	}
 
-	var (
-		visited = map[string]bool{descendantHash: true}
-		queue   = []string{descendantHash}
-	)
+	visited := map[string]bool{descendant: true}
+	queue := []string{descendant}
+
 	for len(queue) > 0 {
-		next := queue[0]
+		c := queue[0]
 		queue = queue[1:]
-		if next == ancestorHash {
-			return true
-		}
-		for _, p := range g.parents[next] {
-			// Mark visited before enqueuing, duplicates never enter the queue.
+
+		for _, p := range g.parents[c] {
+			if p == ancestor {
+				return true
+			}
 			if !visited[p] {
 				visited[p] = true
 				queue = append(queue, p)
 			}
 		}
 	}
+
 	return false
 }
 

@@ -101,7 +101,7 @@ func TestGraph_BranchAt(t *testing.T) {
 
 func TestGraph_Branches(t *testing.T) {
 	g := linearGraph()
-	got := g.Branches()
+	got := g.AllBranches()
 	want := []string{"feat-1", "feat-2", "main"}
 	if len(got) != len(want) {
 		t.Fatalf("Branches() = %v, want %v", got, want)

@@ -350,7 +350,7 @@ func (e *Engine) directChildren(parent string) []string {
 // graphAboveSet returns branches strictly above parent in the graph.
 func (e *Engine) graphAboveSet(parent, parentHead string) map[string]bool {
 	above := make(map[string]bool)
-	for _, branch := range e.graph.Branches() {
+	for _, branch := range e.graph.AllBranches() {
 		if branch == parent || branch == e.baseBranch {
 			continue
 		}
@@ -437,7 +437,7 @@ func (e *Engine) filterGraphDirect(
 	for candidate := range above {
 		cHead, _ := e.graph.HeadOf(candidate)
 		isDirect := true
-		for _, other := range e.graph.Branches() {
+		for _, other := range e.graph.AllBranches() {
 			if other == candidate || other == e.baseBranch || other == parent {
 				continue
 			}
@@ -494,7 +494,7 @@ func (e *Engine) recoverDiverged(
 	direct map[string]bool,
 	parent string,
 ) map[string]bool {
-	for _, branch := range e.graph.Branches() {
+	for _, branch := range e.graph.AllBranches() {
 		if direct[branch] || branch == parent || branch == e.baseBranch {
 			continue
 		}
