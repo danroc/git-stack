@@ -39,13 +39,18 @@ func (g *Client) listBranchHeads() (map[string]string, error) {
 
 	heads := make(map[string]string)
 	scanner := bufio.NewScanner(strings.NewReader(out))
+
 	for scanner.Scan() {
-		parts := strings.Fields(scanner.Text())
-		if len(parts) != 2 {
+		name, hash, ok := strings.Cut(scanner.Text(), " ")
+		if !ok {
 			continue
 		}
-		heads[parts[0]] = parts[1]
+		heads[name] = hash
 	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
 	return heads, nil
 }
 
