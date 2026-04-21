@@ -172,9 +172,10 @@ func cmdView() *cobra.Command {
 // buildDisplayTree converts a discovery tree to a ui tree for rendering.
 func buildDisplayTree(node *discovery.TreeNode, current string) *ui.TreeEntry {
 	entry := &ui.TreeEntry{
-		BranchName: node.Branch.Name,
-		AheadCount: node.CommitsAhead,
-		IsCurrent:  node.Branch.Name == current,
+		BranchName:  node.Branch.Name,
+		AheadCount:  node.AheadCount,
+		BehindCount: node.BehindCount,
+		IsCurrent:   node.Branch.Name == current,
 	}
 	for _, child := range node.Children {
 		entry.Children = append(entry.Children, buildDisplayTree(child, current))

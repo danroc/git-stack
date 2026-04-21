@@ -437,6 +437,12 @@ func TestBuildTree_AheadCount(t *testing.T) {
 	if feat1.Children[0].AheadCount != 1 {
 		t.Errorf("feat-2 AheadCount = %d, want 1", feat1.Children[0].AheadCount)
 	}
+	if feat1.BehindCount != 0 {
+		t.Errorf("feat-1 BehindCount = %d, want 0", feat1.BehindCount)
+	}
+	if feat1.Children[0].BehindCount != 0 {
+		t.Errorf("feat-2 BehindCount = %d, want 0", feat1.Children[0].BehindCount)
+	}
 }
 
 func TestParent_FromConfig(t *testing.T) {

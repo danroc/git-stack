@@ -15,6 +15,7 @@ const (
 type palette struct {
 	branch    string // current branch name
 	ahead     string // "+N" count
+	behind    string // "-N" count
 	connector string // tree-drawing chars
 	reset     string
 }
@@ -23,6 +24,7 @@ func colorPalette() palette {
 	return palette{
 		branch:    bold + green,
 		ahead:     yellow,
+		behind:    yellow,
 		connector: dim,
 		reset:     reset,
 	}

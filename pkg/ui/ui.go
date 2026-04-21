@@ -15,8 +15,9 @@ import (
 // TreeEntry is the display-layer input for RenderTree.
 type TreeEntry struct {
 	BranchName string
-	AheadCount int // relative to immediate parent; 0 for the root/base node
-	IsCurrent  bool
+	AheadCount  int // relative to immediate parent; 0 for the root/base node
+	BehindCount int // behind relative to immediate parent; 0 for the root/base node
+	IsCurrent   bool
 	Children   []*TreeEntry
 }
 
@@ -84,8 +85,15 @@ func (p palette) formatEntry(e *TreeEntry) string {
 	if e.IsCurrent {
 		s = p.branch + s + p.reset
 	}
-	if e.AheadCount > 0 {
-		s += fmt.Sprintf(" (%s+%d%s)", p.ahead, e.AheadCount, p.reset)
+	if e.AheadCount > 0 || e.BehindCount > 0 {
+		var parts []string
+		if e.AheadCount > 0 {
+			parts = append(parts, fmt.Sprintf("%s+%d%s", p.ahead, e.AheadCount, p.reset))
+		}
+		if e.BehindCount > 0 {
+			parts = append(parts, fmt.Sprintf("%s-%d%s", p.behind, e.BehindCount, p.reset))
+		}
+		s += fmt.Sprintf(" (%s)", strings.Join(parts, "/"))
 	}
 	return s
 }
