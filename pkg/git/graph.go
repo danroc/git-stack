@@ -87,6 +87,7 @@ func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 		return nil, fmt.Errorf("inspecting floor parent: %w", err)
 	}
 
+	// Build git log arguments.
 	args := []string{"log", "--format=%H %P"}
 	args = append(args, refs...)
 	if hasParent {
@@ -103,8 +104,9 @@ func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 		return nil, err
 	}
 
+	// Ensure floor is included with no parents.
+	parents[floor] = nil
 	graph.parents = parents
-	graph.parents[floor] = nil
 
 	return graph, nil
 }
@@ -118,8 +120,7 @@ func parseParentLines(out string) (map[string][]string, error) {
 		if len(fields) == 0 {
 			continue
 		}
-		commit := fields[0]
-		parents[commit] = fields[1:]
+		parents[fields[0]] = fields[1:]
 	}
 
 	if err := scanner.Err(); err != nil {
