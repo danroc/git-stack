@@ -252,21 +252,16 @@ func (e *Engine) IsChildOf(child, parent string) bool {
 	return found && err == errStopWalk
 }
 
-// SubtreeChildren returns all branches in the subtree rooted at branchName (excluding
-// the root itself), each paired with their immediate parent, in pre-order (parents
-// before children).
-func (e *Engine) SubtreeChildren(branchName string) []BranchWithParent {
+// SubtreeChildren returns all branches in the subtree rooted at branch (excluding the
+// root itself), each paired with their immediate parent, in pre-order (parents before
+// children).
+func (e *Engine) SubtreeChildren(branch string) []BranchWithParent {
 	root := e.BuildTree()
-	node := findTreeNode(root, branchName)
+	node := findTreeNode(root, branch)
 	if node == nil {
 		return nil
 	}
-
-	var result []BranchWithParent
-	for _, child := range node.Children {
-		collectSubtreeChildren(child, branchName, &result)
-	}
-	return result
+	return flattenSubtree(node)
 }
 
 // SetParent sets branch's stack parent in git config.
@@ -298,20 +293,21 @@ func findTreeNode(root *TreeNode, name string) *TreeNode {
 	return nil
 }
 
-// collectSubtreeChildren appends all nodes in subtree rooted at node to result, pairing
-// each with the given parent name. Nodes are visited in pre-order.
-func collectSubtreeChildren(node *TreeNode, parent string, result *[]BranchWithParent) {
-	*result = append(
-		*result,
-		BranchWithParent{
-			Branch: node.Branch,
-			Parent: parent,
-		},
-	)
-
+// flattenSubtree returns all descendants of node in pre-order, each paired with their
+// immediate parent name. The node itself is not included.
+func flattenSubtree(node *TreeNode) []BranchWithParent {
+	var result []BranchWithParent
 	for _, child := range node.Children {
-		collectSubtreeChildren(child, node.Branch.Name, result)
+		result = append(
+			result,
+			BranchWithParent{
+				Branch: child.Branch,
+				Parent: node.Branch.Name,
+			},
+		)
+		result = append(result, flattenSubtree(child)...)
 	}
+	return result
 }
 
 var errStopWalk = fmt.Errorf("stop walk")
