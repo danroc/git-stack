@@ -122,7 +122,6 @@ func parseParentLines(out string) (map[string][]string, error) {
 			parents[fields[0]] = fields[1:]
 		}
 	}
-
 	return parents, scanner.Err()
 }
 
