@@ -38,8 +38,8 @@ type Discoverer interface {
 // Step describes one unit of work within a bulk operation.
 type Step struct {
 	Branch string
-	Parent string // rebase target or old parent (branch below); empty for Push and Pull
-	To     string // new parent (branch below); set only for the initial step of a Move
+	Parent string // Rebase target or old parent (branch below); empty for Push and Pull
+	To     string // New parent (branch below); set only for the initial step of a Move
 }
 
 // NotifyFn is called before (done=false) and after (done=true) each step to report
@@ -119,15 +119,15 @@ func orNoop(fn NotifyFn) NotifyFn {
 }
 
 // Push pushes every non-base branch in the stack to its upstream, bottom-to-top.
-func (s *Stack) Push(notify NotifyFn) error {
-	n := orNoop(notify)
+func (s *Stack) Push(fn NotifyFn) error {
+	notify := orNoop(fn)
 	return s.forEachBranch(false, func(branch, _ string) error {
 		step := Step{Branch: branch}
-		n(step, false)
+		notify(step, false)
 		if err := s.git.Push(branch); err != nil {
 			return fmt.Errorf("push %s: %w", branch, err)
 		}
-		n(step, true)
+		notify(step, true)
 		return nil
 	})
 }
@@ -135,21 +135,21 @@ func (s *Stack) Push(notify NotifyFn) error {
 // Rebase rebases each non-base branch onto the current tip of its immediate parent,
 // bottom-to-top. On conflict it halts and leaves the repository in the in-progress
 // rebase state. On full success it restores the original branch.
-func (s *Stack) Rebase(notify NotifyFn) error {
-	n := orNoop(notify)
+func (s *Stack) Rebase(fn NotifyFn) error {
+	notify := orNoop(fn)
 	return s.forEachBranch(true, func(branch, parent string) error {
 		step := Step{Branch: branch, Parent: parent}
-		n(step, false)
+		notify(step, false)
 		if err := s.checkoutAndRebase(branch, parent); err != nil {
 			return err
 		}
-		n(step, true)
+		notify(step, true)
 		return nil
 	})
 }
 
-// checkoutAndRebase checks out branch, rebases it onto parent, and records the
-// parent in stack metadata.
+// checkoutAndRebase checks out branch, rebases it onto parent, and records the parent
+// in stack metadata.
 func (s *Stack) checkoutAndRebase(branch, parent string) error {
 	if err := s.git.Checkout(branch); err != nil {
 		return fmt.Errorf("checkout %s: %w", branch, err)
@@ -166,27 +166,27 @@ func (s *Stack) checkoutAndRebase(branch, parent string) error {
 // Pull checks out and pulls (--rebase) every non-base branch in order. On failure it
 // halts and leaves the repo on the failing branch so the user can resolve conflicts and
 // re-run. On full success it restores the original branch.
-func (s *Stack) Pull(notify NotifyFn) error {
-	n := orNoop(notify)
+func (s *Stack) Pull(fn NotifyFn) error {
+	notify := orNoop(fn)
 	return s.forEachBranch(true, func(branch, _ string) error {
 		step := Step{Branch: branch}
-		n(step, false)
+		notify(step, false)
 		if err := s.git.Checkout(branch); err != nil {
 			return fmt.Errorf("checkout %s: %w", branch, err)
 		}
 		if err := s.git.Pull(); err != nil {
 			return fmt.Errorf("pull %s: %w", branch, err)
 		}
-		n(step, true)
+		notify(step, true)
 		return nil
 	})
 }
 
 // Move rebases branch from its current parent onto newParent, then cascades the rebase
-// to all of branch's children. On conflict it halts leaving the repo in the
-// in-progress rebase state. On full success it restores the original branch.
-func (s *Stack) Move(branch, newParent string, notify NotifyFn) error {
-	n := orNoop(notify)
+// to all of branch's children. On conflict it halts leaving the repo in the in-progress
+// rebase state. On full success it restores the original branch.
+func (s *Stack) Move(branch, newParent string, fn NotifyFn) error {
+	notify := orNoop(fn)
 
 	current, err := s.git.CurrentBranch()
 	if err != nil {
@@ -216,7 +216,7 @@ func (s *Stack) Move(branch, newParent string, notify NotifyFn) error {
 	children := s.disc.SubtreeChildren(branch)
 
 	moveStep := Step{Branch: branch, Parent: oldParent, To: newParent}
-	n(moveStep, false)
+	notify(moveStep, false)
 	if err := s.git.RebaseOnto(newParent, oldParent, branch); err != nil {
 		return fmt.Errorf(
 			"move %s from %s to %s: %w",
@@ -229,15 +229,15 @@ func (s *Stack) Move(branch, newParent string, notify NotifyFn) error {
 	if err := s.disc.SetParent(branch, newParent); err != nil {
 		return err
 	}
-	n(moveStep, true)
+	notify(moveStep, true)
 
 	for _, dep := range children {
 		step := Step{Branch: dep.Branch.Name, Parent: dep.Parent}
-		n(step, false)
+		notify(step, false)
 		if err := s.checkoutAndRebase(dep.Branch.Name, dep.Parent); err != nil {
 			return err
 		}
-		n(step, true)
+		notify(step, true)
 	}
 
 	if err := s.git.Checkout(current); err != nil {
