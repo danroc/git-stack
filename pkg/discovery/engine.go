@@ -437,19 +437,19 @@ func (e *Engine) hasDrift(branch string) bool {
 	if !ok {
 		return false
 	}
-	storedBase, ok := e.git.StackMergeBase(branch)
-	if !ok || storedBase == "" {
+	parentHead, ok := e.graph.HeadOf(parent)
+	if !ok {
 		return false
 	}
 	branchHead, ok := e.graph.HeadOf(branch)
 	if !ok {
 		return false
 	}
-	parentHead, ok := e.graph.HeadOf(parent)
+	base, ok := e.graph.MergeBase(branchHead, parentHead)
 	if !ok {
 		return false
 	}
-	base, ok := e.graph.MergeBase(branchHead, parentHead)
+	storedBase, ok := e.git.StackMergeBase(branch)
 	if !ok {
 		return false
 	}
