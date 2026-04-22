@@ -16,6 +16,8 @@ type worktreeGitOps struct {
 	activeDir  string                      // path of the active worktree ("" = primary)
 }
 
+// newWorktreeGitOps creates a new worktreeGitOps that wraps primary and handles
+// branches checked out in other worktrees.
 func newWorktreeGitOps(
 	primary Repository,
 	worktrees map[string]string,
@@ -31,10 +33,13 @@ func newWorktreeGitOps(
 	}
 }
 
+// CurrentBranch always queries the primary worktree, since branch info is shared.
 func (w *worktreeGitOps) CurrentBranch() (string, error) {
 	return w.primary.CurrentBranch()
 }
 
+// Checkout switches the active worktree context if the branch is checked out elsewhere,
+// or performs a normal checkout if the branch is local to this worktree.
 func (w *worktreeGitOps) Checkout(branch string) error {
 	if dir, ok := w.worktrees[branch]; ok && dir != w.currentDir {
 		// Branch is checked out in another worktree — switch context there.
@@ -48,10 +53,12 @@ func (w *worktreeGitOps) Checkout(branch string) error {
 	return w.primary.Checkout(branch)
 }
 
+// Push always pushes from the primary worktree.
 func (w *worktreeGitOps) Push(branch string) error {
 	return w.primary.Push(branch)
 }
 
+// Pull pulls in the active worktree context, wrapping errors with worktree path info.
 func (w *worktreeGitOps) Pull() error {
 	err := w.active.Pull()
 	if err != nil && w.activeDir != "" {
@@ -60,6 +67,7 @@ func (w *worktreeGitOps) Pull() error {
 	return err
 }
 
+// Rebase rebases in the active worktree context, wrapping errors with worktree path info.
 func (w *worktreeGitOps) Rebase(onto string) error {
 	err := w.active.Rebase(onto)
 	if err != nil && w.activeDir != "" {
@@ -68,6 +76,8 @@ func (w *worktreeGitOps) Rebase(onto string) error {
 	return err
 }
 
+// RebaseOnto rebases in the active worktree context, wrapping errors with worktree path
+// info.
 func (w *worktreeGitOps) RebaseOnto(newBase, upstream, branch string) error {
 	err := w.active.RebaseOnto(newBase, upstream, branch)
 	if err != nil && w.activeDir != "" {
