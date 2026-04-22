@@ -38,8 +38,8 @@ type Discoverer interface {
 // Step describes one unit of work within a bulk operation.
 type Step struct {
 	Branch string
-	Parent string // rebase target or old parent; empty for Push and Pull
-	To     string // new parent; set only for the initial step of a Move
+	Parent string // rebase target or old parent (branch below); empty for Push and Pull
+	To     string // new parent (branch below); set only for the initial step of a Move
 }
 
 // NotifyFn is called before (done=false) and after (done=true) each step to report
@@ -76,7 +76,7 @@ func New(g *git.Client, base string) (*Stack, error) {
 }
 
 // branchAction is called for each non-base branch in the stack. It receives the branch
-// name and its immediate parent's name.
+// name and its parent (the branch below it in the stack).
 type branchAction func(branch, parent string) error
 
 // forEachBranch discovers the stack, iterates non-base members bottom-to-top, and calls
@@ -183,7 +183,7 @@ func (s *Stack) Pull(notify NotifyFn) error {
 }
 
 // Move rebases branch from its current parent onto newParent, then cascades the rebase
-// to all of branch's descendants. On conflict it halts leaving the repo in the
+// to all of branch's children. On conflict it halts leaving the repo in the
 // in-progress rebase state. On full success it restores the original branch.
 func (s *Stack) Move(branch, newParent string, notify NotifyFn) error {
 	n := orNoop(notify)

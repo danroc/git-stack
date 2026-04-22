@@ -110,7 +110,7 @@ func (e *Engine) DiscoverStack(
 }
 
 // traceChainTo returns the chain from baseBranch (inclusive) up to target (inclusive),
-// bottom-to-top.
+// bottom-to-top (base → ... → target).
 //
 // Parent resolution is config-first and side-effect-free:
 // 1. use branch.<name>.stackParent when present
@@ -199,7 +199,8 @@ func (e *Engine) buildChildren(node *TreeNode) {
 	}
 }
 
-// directChildren returns branches whose resolved parent is parent.
+// directChildren returns branches whose resolved parent is parent (i.e., branches
+// directly above parent in the stack).
 //
 // Stored relationships are authoritative. The graph is only used to fill in branches
 // that do not have a stored parent, using a deterministic merge-base-based inference.

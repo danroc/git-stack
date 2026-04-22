@@ -203,7 +203,7 @@ func stackRunE(
 func cmdMove() *cobra.Command {
 	return &cobra.Command{
 		Use:   "move [branch] <new-parent>",
-		Short: "Move a branch to a different parent, rebasing it and its descendants",
+		Short: "Move a branch to a different parent, rebasing it and its children",
 		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(_ *cobra.Command, args []string) error {
 			g, base, err := resolveBase()
