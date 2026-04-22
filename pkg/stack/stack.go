@@ -196,7 +196,7 @@ func (s *Stack) Move(branch, newParent string, notify NotifyFn) error {
 	if branch == newParent {
 		return fmt.Errorf("cannot move %s onto itself", branch)
 	}
-	if s.disc.IsBranchDescendant(branch, newParent) {
+	if s.disc.IsChildOf(newParent, branch) {
 		return fmt.Errorf(
 			"cannot move %s onto %s: would create a cycle",
 			branch,
