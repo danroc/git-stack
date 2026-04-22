@@ -4,11 +4,28 @@
 
 Git Stack CLI is a lightweight, platform-agnostic command-line tool for managing "stacks" of interdependent Git branches. It uses the Git commit graph as the sole source of truth — no tool-specific metadata files are written.
 
-## 2. Problem Statement
+## 2. Terminology
+
+The following terms are used throughout this specification and the codebase.
+All refer to positions in the stack hierarchy, defined from bottom to top.
+
+- **base** — The bottom-most branch in the stack. Resolved as `main`, `master`,
+  or via the `--base` flag. The base has no parent.
+- **parent** — The branch *below* in the stack. A branch's parent is the branch
+  it was branched FROM. In a stack `main → A → B`, `A` is the parent of `B`.
+- **child** — A branch *above* in the stack. A branch's child was branched off
+  from it. In a stack `main → A → B`, `B` is a child of `A`.
+- **stack direction** — `base → parent → child → child` (bottom to top).
+  Operations iterate from parent to child (bottom-to-top).
+
+The config key `branch.<name>.stackParent` stores the parent (branch below) for
+each branch. This key name uses the parent/child metaphor exclusively.
+
+## 3. Problem Statement
 
 Developers working on sequential, interdependent features often maintain a "stack" of branches where branch B is branched off branch A. Managing these manually is error-prone when rebasing or syncing with remotes. Existing solutions (e.g. `gh stack`) are tied to specific platforms, making them unusable in generic Git workflows or other hosting providers (GitLab, Bitbucket, etc.).
 
-## 3. Solution
+## 4. Solution
 
 A stateless CLI tool that leverages Git primitives (`git rev-list`, `git merge-base`, `refs/heads/*`) to:
 
@@ -20,11 +37,11 @@ A stateless CLI tool that leverages Git primitives (`git rev-list`, `git merge-b
 relationships are persisted in local git config under `branch.<name>.stackParent`,
 which is a standard git configuration key that other tools can read if they wish.
 
-## 4. Core Functional Requirements
+## 5. Core Functional Requirements
 
-### 4.1 Command Interface
+### 5.1 Command Interface
 
-All commands accept a `--base <branch>` flag to override base branch detection (see §4.2).
+All commands accept a `--base <branch>` flag to override base branch detection (see §5.2).
 
 ---
 
@@ -69,7 +86,7 @@ main -> feat-1 (+2) -> *feat-2 (+1) -> feat-3 (+3)
 
 ---
 
-### 4.2 The Discovery Engine
+### 5.2 The Discovery Engine
 
 The engine identifies the active stack without reading any tool-specific files. All information is derived from the Git commit graph and `refs/heads/*`.
 
@@ -93,7 +110,7 @@ sits there. Typical behavior:
   config names it. Otherwise treat them as siblings — the other branch does not
   appear in the current branch's chain.
 - All other branches encountered during the walk (strictly below the current
-  branch) are included in the chain.
+  branch as children) are included in the chain.
 
 If the walk does not bottom out at the base branch — either because the base
 has advanced past the current branch's fork point, or because an intermediate
@@ -103,7 +120,7 @@ branch until the base is reached.
 
 #### Downward Trace (current → top)
 
-Scan all entries in `refs/heads/*`. A candidate branch `B` is a descendant of
+Scan all entries in `refs/heads/*`. A candidate branch `B` is a child of
 the current branch if its HEAD is strictly above the current branch in the
 commit graph.
 
@@ -118,7 +135,7 @@ current branch but which is not in the graph-above set, include it as a direct
 child. These are branches that were children of the current branch before the
 current branch advanced past them.
 
-Recurse from each chosen child until no further descendants are found.
+Recurse from each chosen child until no further children are found.
 
 #### Ambiguity Handling
 
@@ -144,7 +161,7 @@ so the graph alone no longer shows the stack relationship. When the graph
 gives an unambiguous answer that contradicts config, the graph wins and config
 is repaired.
 
-### 4.3 Conflict and Error Management
+### 5.3 Conflict and Error Management
 
 If any operation (`push`, `pull --rebase`, `rebase`) fails for any reason:
 
@@ -153,22 +170,22 @@ If any operation (`push`, `pull --rebase`, `rebase`) fails for any reason:
 - For `pull --rebase` conflicts: leave the repository in the in-progress rebase state so the user can resolve conflicts and continue manually.
 - Exit with a non-zero status code.
 
-## 5. Technical Architecture (Go)
+## 6. Technical Architecture (Go)
 
-### 5.1 Project Structure
+### 6.1 Project Structure
 
 - `cmd/`: Cobra command definitions and CLI entry point.
 - `pkg/engine/`: Core discovery and lineage-tracing algorithms.
 - `pkg/gitutils/`: Abstraction layer for executing Git commands via `os/exec`.
 - `pkg/ui/`: Stack rendering and interactive prompt logic.
 
-### 5.2 Implementation Details
+### 6.2 Implementation Details
 
 - **Language**: Go (static binaries, portable, strong CLI support).
 - **Dependencies**: `spf13/cobra` for command parsing and flag handling.
 - **Git Interface**: Direct execution of Git subprocesses to preserve compatibility with the user's existing Git configuration and hooks.
 
-## 6. Testing Strategy
+## 7. Testing Strategy
 
 - **Unit Tests**: Test the `engine` package using mocked Git outputs to verify lineage tracing, direct-child filtering, and ambiguity detection across known topologies.
 - **Integration Tests**: Shell scripts that:
@@ -176,7 +193,7 @@ If any operation (`push`, `pull --rebase`, `rebase`) fails for any reason:
   2. Create known topologies (linear, bifurcated, disconnected).
   3. Assert that `add`, `push`, `pull`, `rebase`, and `view` produce correct output and exit codes per this specification.
 
-## 7. Out of Scope
+## 8. Out of Scope
 
 - Processing multiple stack paths simultaneously within a single command (bifurcations are handled by prompting the user to select one path).
 - Integration with any third-party APIs (GitHub, GitLab, etc.).
