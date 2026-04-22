@@ -156,6 +156,36 @@ func TestWorktreeGitOps_CheckoutDelegatesToRemote(t *testing.T) {
 	}
 }
 
+func TestWorktreeGitOps_RebaseOntoDelegatesToRemote(t *testing.T) {
+	primary := &fakeRepository{currentBranch: "main"}
+	remote := &fakeRepository{}
+
+	w := newWorktreeGitOps(primary, map[string]string{
+		"main":   "/repo",
+		"feat-1": "/repo-feat",
+	}, "/repo", func(dir string) Repository {
+		if dir != "/repo-feat" {
+			t.Fatalf("unexpected dir %q", dir)
+		}
+		return remote
+	})
+
+	if err := w.Checkout("feat-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.RebaseOnto("main", "feat-0", "feat-1"); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(primary.calls) != 0 {
+		t.Errorf("expected no calls on primary, got %v", primary.calls)
+	}
+	want := []string{"RebaseOnto:main:feat-0:feat-1"}
+	if !equalStrings(remote.calls, want) {
+		t.Errorf("expected remote calls %v, got %v", want, remote.calls)
+	}
+}
+
 func TestWorktreeGitOps_CheckoutLocalBranch(t *testing.T) {
 	primary := &fakeRepository{currentBranch: "main"}
 

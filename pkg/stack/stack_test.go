@@ -74,6 +74,7 @@ func TestMove_LeafReparent(t *testing.T) {
 
 	wantCalls := []string{
 		"CurrentBranch",
+		"Checkout:feat-2",
 		"RebaseOnto:main:feat-1:feat-2",
 		"Checkout:main",
 	}
@@ -108,6 +109,7 @@ func TestMove_CascadesDescendants(t *testing.T) {
 
 	want := []string{
 		"CurrentBranch",
+		"Checkout:feat-1",
 		"RebaseOnto:hot-fix:main:feat-1",
 		"Checkout:feat-2",
 		"Rebase:feat-1",
@@ -176,6 +178,33 @@ func TestMove_RebaseOntoFailureHalts(t *testing.T) {
 	}
 }
 
+func TestMove_CheckoutMovedBranchFailureHalts(t *testing.T) {
+	repo := &failingRepo{
+		fakeRepository: fakeRepository{currentBranch: "main"},
+		failCheckoutOn: map[string]error{"feat-1": errors.New("checked out elsewhere")},
+	}
+	disc := &fakeDiscoverer{
+		parents: map[string]string{"feat-1": "main"},
+		subtrees: map[string][]discovery.BranchWithParent{
+			"feat-1": {{Branch: discovery.Branch{Name: "feat-2"}, Parent: "feat-1"}},
+		},
+	}
+
+	if err := newMoveStack(repo, disc).Move("feat-1", "hot-fix", nil); err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	wantCalls := []string{"CurrentBranch", "Checkout:feat-1"}
+	if !equalStrings(repo.calls, wantCalls) {
+		t.Errorf("git calls = %v, want %v", repo.calls, wantCalls)
+	}
+	if len(disc.setParentLog) != 0 {
+		t.Errorf(
+			"SetParent should not be called on checkout failure, got %v",
+			disc.setParentLog,
+		)
+	}
+}
+
 func TestMove_DescendantRebaseFailureHalts(t *testing.T) {
 	repo := &failingRepo{
 		fakeRepository: fakeRepository{currentBranch: "main"},
@@ -205,8 +234,17 @@ func TestMove_DescendantRebaseFailureHalts(t *testing.T) {
 // failingRepo extends fakeRepository with configurable errors.
 type failingRepo struct {
 	fakeRepository
+	failCheckoutOn map[string]error
 	failRebaseOnto error
 	failRebaseOn   map[string]error // parent → error when rebasing onto that parent
+}
+
+func (f *failingRepo) Checkout(branch string) error {
+	_ = f.fakeRepository.Checkout(branch)
+	if err, ok := f.failCheckoutOn[branch]; ok {
+		return err
+	}
+	return nil
 }
 
 func (f *failingRepo) RebaseOnto(newBase, upstream, branch string) error {
