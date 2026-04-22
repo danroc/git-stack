@@ -28,8 +28,8 @@ func (f *fakeDiscoverer) DiscoverStack(
 	return f.stack, nil
 }
 
-func (f *fakeDiscoverer) IsBranchDescendant(ancestor, descendant string) bool {
-	return f.descendants[[2]string{ancestor, descendant}]
+func (f *fakeDiscoverer) IsChildOf(child, parent string) bool {
+	return f.descendants[[2]string{parent, child}]
 }
 
 func (f *fakeDiscoverer) Parent(branch string) (string, error) {
@@ -39,7 +39,7 @@ func (f *fakeDiscoverer) Parent(branch string) (string, error) {
 	return f.parents[branch], nil
 }
 
-func (f *fakeDiscoverer) SubtreeMembers(name string) []discovery.BranchWithParent {
+func (f *fakeDiscoverer) SubtreeChildren(name string) []discovery.BranchWithParent {
 	return f.subtrees[name]
 }
 
@@ -224,7 +224,7 @@ func (f *failingRepo) Rebase(onto string) error {
 
 // TestMove_CycleDetectionViaConfigChain verifies that cycle detection blocks a
 // Move even when the child has diverged from the parent. The fakeDiscoverer's
-// IsBranchDescendant method encodes the stack-tree relationship; the real
+// IsChildOf method encodes the stack-tree relationship; the real
 // Engine implementation (Task 11) uses the config chain for the same purpose.
 func TestMove_CycleDetectionViaConfigChain(t *testing.T) {
 	disc := &fakeDiscoverer{

@@ -127,11 +127,11 @@ func TestTraceChainTo_ConfigParentWins(t *testing.T) {
 	}
 }
 
-func TestTraceDescendants_Bifurcation(t *testing.T) {
+func TestTraceChildren_Bifurcation(t *testing.T) {
 	e := newTestEngine(t, branchingTestGraph(), "main")
 	chooseCalled := false
 
-	_, err := e.traceDescendants(
+	_, err := e.traceChildren(
 		"main",
 		func(action string, choices []string) (string, error) {
 			chooseCalled = true
@@ -252,16 +252,16 @@ func TestParent_ConfigFirstThenInference(t *testing.T) {
 	}
 }
 
-func TestIsBranchDescendant_FollowsResolvedParents(t *testing.T) {
+func TestIsChildOf_FollowsResolvedParents(t *testing.T) {
 	e := newTestEngine(t, linearTestGraph(), "main")
-	if !e.IsBranchDescendant("main", "feat-2") {
+	if !e.IsChildOf("feat-2", "main") {
 		t.Fatal("feat-2 should be below main")
 	}
 
 	if err := e.git.SetStackParent("feat-2", "main"); err != nil {
 		t.Fatal(err)
 	}
-	if e.IsBranchDescendant("feat-1", "feat-2") {
+	if e.IsChildOf("feat-2", "feat-1") {
 		t.Fatal("feat-2 should no longer be below feat-1 once config points to main")
 	}
 }
@@ -312,17 +312,17 @@ func TestSetParent_StoresLastKnownMergeBase(t *testing.T) {
 	}
 }
 
-func TestSubtreeMembers_Linear(t *testing.T) {
+func TestSubtreeChildren_Linear(t *testing.T) {
 	e := newTestEngine(t, linearTestGraph(), "main")
-	members := e.SubtreeMembers("feat-1")
-	if len(members) != 1 {
-		t.Fatalf("got %d members, want 1", len(members))
+	children := e.SubtreeChildren("feat-1")
+	if len(children) != 1 {
+		t.Fatalf("got %d members, want 1", len(children))
 	}
-	if members[0].Branch.Name != "feat-2" || members[0].Parent != "feat-1" {
+	if children[0].Branch.Name != "feat-2" || children[0].Parent != "feat-1" {
 		t.Fatalf(
 			"got {%q %q}, want {feat-2 feat-1}",
-			members[0].Branch.Name,
-			members[0].Parent,
+			children[0].Branch.Name,
+			children[0].Parent,
 		)
 	}
 }

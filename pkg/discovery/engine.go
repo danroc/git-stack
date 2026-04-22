@@ -90,7 +90,7 @@ type candidateScore struct {
 //
 // Two passes build the result. The first (base → currentBranch) walks the first-parent
 // chain collecting branch heads from the bottom up. The second (currentBranch → tip)
-// follows graph ancestry to find branches stacked above currentBranch, calling
+// follows the parent/child tree to find child branches above currentBranch, calling
 // chooseBranch at any bifurcation.
 func (e *Engine) DiscoverStack(
 	currentBranch string,
@@ -101,12 +101,12 @@ func (e *Engine) DiscoverStack(
 		return nil, err
 	}
 
-	descendants, err := e.traceDescendants(currentBranch, chooseBranch)
+	children, err := e.traceChildren(currentBranch, chooseBranch)
 	if err != nil {
 		return nil, err
 	}
 
-	return append(ancestors, descendants...), nil
+	return append(ancestors, children...), nil
 }
 
 // traceChainTo returns the chain from baseBranch (inclusive) up to target (inclusive),
@@ -145,7 +145,7 @@ func (e *Engine) traceChainTo(target string) ([]Branch, error) {
 	return chain, nil
 }
 
-func (e *Engine) traceDescendants(
+func (e *Engine) traceChildren(
 	branch string,
 	chooseBranch ChooseBranchFn,
 ) ([]Branch, error) {
@@ -243,10 +243,10 @@ func (e *Engine) IsChildOf(child, parent string) bool {
 	return found && err == errStopWalk
 }
 
-// SubtreeMembers returns all branches in the subtree rooted at branchName (excluding
+// SubtreeChildren returns all branches in the subtree rooted at branchName (excluding
 // the root itself), each paired with their immediate parent, in pre-order (parents
 // before children).
-func (e *Engine) SubtreeMembers(branchName string) []BranchWithParent {
+func (e *Engine) SubtreeChildren(branchName string) []BranchWithParent {
 	root := e.BuildTree()
 	node := findTreeNode(root, branchName)
 	if node == nil {
@@ -255,7 +255,7 @@ func (e *Engine) SubtreeMembers(branchName string) []BranchWithParent {
 
 	var result []BranchWithParent
 	for _, child := range node.Children {
-		collectSubtreeMembers(child, branchName, &result)
+		collectSubtreeChildren(child, branchName, &result)
 	}
 	return result
 }
@@ -287,7 +287,7 @@ func findTreeNode(root *TreeNode, name string) *TreeNode {
 	return nil
 }
 
-func collectSubtreeMembers(node *TreeNode, parent string, result *[]BranchWithParent) {
+func collectSubtreeChildren(node *TreeNode, parent string, result *[]BranchWithParent) {
 	*result = append(
 		*result,
 		BranchWithParent{
@@ -297,7 +297,7 @@ func collectSubtreeMembers(node *TreeNode, parent string, result *[]BranchWithPa
 	)
 
 	for _, child := range node.Children {
-		collectSubtreeMembers(child, node.Branch.Name, result)
+		collectSubtreeChildren(child, node.Branch.Name, result)
 	}
 }
 

@@ -29,9 +29,9 @@ type Discoverer interface {
 		currentBranch string,
 		chooseBranch discovery.ChooseBranchFn,
 	) ([]discovery.Branch, error)
-	IsBranchDescendant(ancestor, descendant string) bool
+	IsChildOf(child, parent string) bool
 	Parent(branch string) (string, error)
-	SubtreeMembers(branchName string) []discovery.BranchWithParent
+	SubtreeChildren(branchName string) []discovery.BranchWithParent
 	SetParent(branch, parent string) error
 }
 
@@ -213,7 +213,7 @@ func (s *Stack) Move(branch, newParent string, notify NotifyFn) error {
 	}
 
 	// Snapshot the subtree before the move; commit hashes change after rebase.
-	descendants := s.disc.SubtreeMembers(branch)
+	children := s.disc.SubtreeChildren(branch)
 
 	moveStep := Step{Branch: branch, Parent: oldParent, To: newParent}
 	n(moveStep, false)
@@ -231,7 +231,7 @@ func (s *Stack) Move(branch, newParent string, notify NotifyFn) error {
 	}
 	n(moveStep, true)
 
-	for _, dep := range descendants {
+	for _, dep := range children {
 		step := Step{Branch: dep.Branch.Name, Parent: dep.Parent}
 		n(step, false)
 		if err := s.checkoutAndRebase(dep.Branch.Name, dep.Parent); err != nil {
