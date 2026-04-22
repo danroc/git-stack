@@ -39,6 +39,8 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error { return e.Err }
 
+// run executes a git command with the given args in the client's working directory,
+// returning trimmed stdout. On non-zero exit it returns a trimmed stderr and an Error.
 func (g *Client) run(args ...string) (string, error) {
 	var (
 		stdout bytes.Buffer
