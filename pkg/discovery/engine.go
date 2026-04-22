@@ -368,7 +368,11 @@ func (e *Engine) resolveParent(branch string) (string, error) {
 		return "", fmt.Errorf("branch %q has no parent in the stack", branch)
 	}
 	if parent, ok := e.git.StackParent(branch); ok {
-		return parent, nil
+		if e.graph.HasBranch(parent) {
+			return parent, nil
+		}
+		// If the stored parent doesn't exist (anymore) in the graph, ignore it and fall
+		// back to inference.
 	}
 	if parent, ok := e.inferParent(branch); ok {
 		return parent, nil
