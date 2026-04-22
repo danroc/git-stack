@@ -22,7 +22,8 @@ type TreeEntry struct {
 	Children    []*TreeEntry
 }
 
-// writer wraps an io.Writer and absorbs write errors after the first failure.
+// writer wraps an io.Writer and absorbs write errors after the first failure,
+// ensuring subsequent calls are no-ops.
 type writer struct {
 	w   io.Writer
 	p   palette
@@ -57,6 +58,8 @@ const (
 	treeIndent    = "   "
 )
 
+// renderChildren recursively prints children with proper tree-drawing connectors and
+// indentation. prefix accumulates vertical bar characters for nested levels.
 func renderChildren(children []*TreeEntry, prefix string, w *writer) {
 	for i, child := range children {
 		isLast := i == len(children)-1
@@ -81,6 +84,8 @@ func renderChildren(children []*TreeEntry, prefix string, w *writer) {
 	}
 }
 
+// formatEntry formats a tree entry as a styled string, including current-branch
+// highlighting, ahead/behind counts, and drift indicator.
 func (p palette) formatEntry(e *TreeEntry) string {
 	s := e.BranchName
 	if e.IsCurrent {
