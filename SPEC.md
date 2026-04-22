@@ -98,6 +98,25 @@ success, the originally checked-out branch is restored.
 
 ---
 
+**`git-stack move [branch] <new-parent>`**
+
+Reparents a branch within the stack by rebasing it from its current parent onto
+`<new-parent>`, then cascades that rebase through every descendant so the stack remains
+linear. If `<branch>` is omitted, the currently checked out branch is moved.
+
+Given a stack `main -> A -> B -> C`, `git-stack move B main` runs this sequence:
+
+1. Check out B and rebase it from A onto `main`.
+2. Check out C and rebase it onto the updated tip of B.
+
+On full success, the originally checked-out branch is restored. If the moved branch is
+checked out in another Git worktree, the command runs the rebase in that worktree
+automatically instead of requiring the user to rerun the command there. If any rebase
+produces conflicts, the command halts immediately and leaves the failing worktree in the
+in-progress rebase state so the user can resolve it and continue manually.
+
+---
+
 **`git-stack view`**
 
 Renders a linear representation of the current stack. The active branch is marked with

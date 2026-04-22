@@ -163,6 +163,27 @@ func (s *Stack) checkoutAndRebase(branch, parent string) error {
 	return nil
 }
 
+// checkoutAndRebaseOnto checks out branch, rebases it from oldParent onto newParent,
+// and records the new parent in stack metadata.
+func (s *Stack) checkoutAndRebaseOnto(branch, oldParent, newParent string) error {
+	if err := s.git.Checkout(branch); err != nil {
+		return fmt.Errorf("checkout %s: %w", branch, err)
+	}
+	if err := s.git.RebaseOnto(newParent, oldParent, branch); err != nil {
+		return fmt.Errorf(
+			"move %s from %s to %s: %w",
+			branch,
+			oldParent,
+			newParent,
+			err,
+		)
+	}
+	if err := s.disc.SetParent(branch, newParent); err != nil {
+		return fmt.Errorf("update stack metadata for %s: %w", branch, err)
+	}
+	return nil
+}
+
 // Pull checks out and pulls (--rebase) every non-base branch in order. On failure it
 // halts and leaves the repo on the failing branch so the user can resolve conflicts and
 // re-run. On full success it restores the original branch.
@@ -217,16 +238,7 @@ func (s *Stack) Move(branch, newParent string, fn NotifyFn) error {
 
 	moveStep := Step{Branch: branch, Parent: oldParent, To: newParent}
 	notify(moveStep, false)
-	if err := s.git.RebaseOnto(newParent, oldParent, branch); err != nil {
-		return fmt.Errorf(
-			"move %s from %s to %s: %w",
-			branch,
-			oldParent,
-			newParent,
-			err,
-		)
-	}
-	if err := s.disc.SetParent(branch, newParent); err != nil {
+	if err := s.checkoutAndRebaseOnto(branch, oldParent, newParent); err != nil {
 		return err
 	}
 	notify(moveStep, true)
