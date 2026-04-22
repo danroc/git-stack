@@ -226,15 +226,15 @@ func (e *Engine) Parent(branch string) (string, error) {
 	return e.resolveParent(branch)
 }
 
-// IsBranchDescendant reports whether descendant is strictly below ancestor in the
-// resolved stack tree.
-func (e *Engine) IsBranchDescendant(ancestor, descendant string) bool {
-	if ancestor == descendant {
+// IsChildOf reports whether child is a direct or transitive child of parent
+// in the resolved stack tree (i.e., child is strictly below parent).
+func (e *Engine) IsChildOf(child, parent string) bool {
+	if child == parent {
 		return false
 	}
 	found := false
-	err := e.walkResolvedParents(descendant, func(parent string) error {
-		if parent == ancestor {
+	err := e.walkResolvedParents(child, func(p string) error {
+		if p == parent {
 			found = true
 			return errStopWalk
 		}
