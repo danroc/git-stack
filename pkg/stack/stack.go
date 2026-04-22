@@ -93,19 +93,19 @@ func (s *Stack) forEachBranch(restoreBranch bool, action branchAction) error {
 		return err
 	}
 
-	for i, member := range members {
-		if member.Name == s.disc.BaseBranch() {
+	parent := s.disc.BaseBranch()
+	for _, member := range members {
+		if member.Name == parent {
 			continue
 		}
-		if err := action(member.Name, members[i-1].Name); err != nil {
+		if err := action(member.Name, parent); err != nil {
 			return err
 		}
+		parent = member.Name
 	}
 
 	if restoreBranch {
-		if err := s.git.Checkout(current); err != nil {
-			return fmt.Errorf("restore branch %s: %w", current, err)
-		}
+		return s.restoreBranch(current)
 	}
 	return nil
 }
@@ -118,17 +118,33 @@ func orNoop(fn NotifyFn) NotifyFn {
 	return func(Step, bool) {}
 }
 
+// runStep emits start/done notifications around a step and only emits done on success.
+func runStep(notify NotifyFn, step Step, fn func() error) error {
+	notify(step, false)
+	if err := fn(); err != nil {
+		return err
+	}
+	notify(step, true)
+	return nil
+}
+
+func (s *Stack) restoreBranch(branch string) error {
+	if err := s.git.Checkout(branch); err != nil {
+		return fmt.Errorf("restore branch %s: %w", branch, err)
+	}
+	return nil
+}
+
 // Push pushes every non-base branch in the stack to its upstream, bottom-to-top.
 func (s *Stack) Push(fn NotifyFn) error {
 	notify := orNoop(fn)
 	return s.forEachBranch(false, func(branch, _ string) error {
-		step := Step{Branch: branch}
-		notify(step, false)
-		if err := s.git.Push(branch); err != nil {
-			return fmt.Errorf("push %s: %w", branch, err)
-		}
-		notify(step, true)
-		return nil
+		return runStep(notify, Step{Branch: branch}, func() error {
+			if err := s.git.Push(branch); err != nil {
+				return fmt.Errorf("push %s: %w", branch, err)
+			}
+			return nil
+		})
 	})
 }
 
@@ -138,24 +154,21 @@ func (s *Stack) Push(fn NotifyFn) error {
 func (s *Stack) Rebase(fn NotifyFn) error {
 	notify := orNoop(fn)
 	return s.forEachBranch(true, func(branch, parent string) error {
-		step := Step{Branch: branch, Parent: parent}
-		notify(step, false)
-		if err := s.checkoutAndRebase(branch, parent); err != nil {
-			return err
-		}
-		notify(step, true)
-		return nil
+		return runStep(notify, Step{Branch: branch, Parent: parent}, func() error {
+			return s.checkoutAndRebase(branch, parent)
+		})
 	})
 }
 
-// checkoutAndRebase checks out branch, rebases it onto parent, and records the parent
-// in stack metadata.
-func (s *Stack) checkoutAndRebase(branch, parent string) error {
+func (s *Stack) checkoutAndSetParent(
+	branch, parent string,
+	rebase func() error,
+) error {
 	if err := s.git.Checkout(branch); err != nil {
 		return fmt.Errorf("checkout %s: %w", branch, err)
 	}
-	if err := s.git.Rebase(parent); err != nil {
-		return fmt.Errorf("rebase %s onto %s: %w", branch, parent, err)
+	if err := rebase(); err != nil {
+		return err
 	}
 	if err := s.disc.SetParent(branch, parent); err != nil {
 		return fmt.Errorf("update stack metadata for %s: %w", branch, err)
@@ -163,23 +176,28 @@ func (s *Stack) checkoutAndRebase(branch, parent string) error {
 	return nil
 }
 
+// checkoutAndRebase checks out branch, rebases it onto parent, and records the parent
+// in stack metadata.
+func (s *Stack) checkoutAndRebase(branch, parent string) error {
+	return s.checkoutAndSetParent(branch, parent, func() error {
+		if err := s.git.Rebase(parent); err != nil {
+			return fmt.Errorf("rebase %s onto %s: %w", branch, parent, err)
+		}
+		return nil
+	})
+}
+
 // checkoutAndRebaseOnto checks out branch, rebases it from oldParent onto newParent,
 // and records the new parent in stack metadata.
 func (s *Stack) checkoutAndRebaseOnto(branch, oldParent, newParent string) error {
-	if err := s.git.Checkout(branch); err != nil {
-		return fmt.Errorf("checkout %s: %w", branch, err)
-	}
-
-	if err := s.git.RebaseOnto(newParent, oldParent, branch); err != nil {
-		return fmt.Errorf(
-			"move %s from %s to %s: %w", branch, oldParent, newParent, err,
-		)
-	}
-
-	if err := s.disc.SetParent(branch, newParent); err != nil {
-		return fmt.Errorf("update stack metadata for %s: %w", branch, err)
-	}
-	return nil
+	return s.checkoutAndSetParent(branch, newParent, func() error {
+		if err := s.git.RebaseOnto(newParent, oldParent, branch); err != nil {
+			return fmt.Errorf(
+				"move %s from %s to %s: %w", branch, oldParent, newParent, err,
+			)
+		}
+		return nil
+	})
 }
 
 // Pull checks out and pulls (--rebase) every non-base branch in order. On failure it
@@ -188,16 +206,15 @@ func (s *Stack) checkoutAndRebaseOnto(branch, oldParent, newParent string) error
 func (s *Stack) Pull(fn NotifyFn) error {
 	notify := orNoop(fn)
 	return s.forEachBranch(true, func(branch, _ string) error {
-		step := Step{Branch: branch}
-		notify(step, false)
-		if err := s.git.Checkout(branch); err != nil {
-			return fmt.Errorf("checkout %s: %w", branch, err)
-		}
-		if err := s.git.Pull(); err != nil {
-			return fmt.Errorf("pull %s: %w", branch, err)
-		}
-		notify(step, true)
-		return nil
+		return runStep(notify, Step{Branch: branch}, func() error {
+			if err := s.git.Checkout(branch); err != nil {
+				return fmt.Errorf("checkout %s: %w", branch, err)
+			}
+			if err := s.git.Pull(); err != nil {
+				return fmt.Errorf("pull %s: %w", branch, err)
+			}
+			return nil
+		})
 	})
 }
 
@@ -234,24 +251,23 @@ func (s *Stack) Move(branch, newParent string, fn NotifyFn) error {
 	// Snapshot the subtree before the move; commit hashes change after rebase.
 	children := s.disc.SubtreeChildren(branch)
 
-	moveStep := Step{Branch: branch, Parent: oldParent, To: newParent}
-	notify(moveStep, false)
-	if err := s.checkoutAndRebaseOnto(branch, oldParent, newParent); err != nil {
+	if err := runStep(
+		notify,
+		Step{Branch: branch, Parent: oldParent, To: newParent},
+		func() error { return s.checkoutAndRebaseOnto(branch, oldParent, newParent) },
+	); err != nil {
 		return err
 	}
-	notify(moveStep, true)
 
 	for _, dep := range children {
-		step := Step{Branch: dep.Branch.Name, Parent: dep.Parent}
-		notify(step, false)
-		if err := s.checkoutAndRebase(dep.Branch.Name, dep.Parent); err != nil {
+		if err := runStep(
+			notify,
+			Step{Branch: dep.Branch.Name, Parent: dep.Parent},
+			func() error { return s.checkoutAndRebase(dep.Branch.Name, dep.Parent) },
+		); err != nil {
 			return err
 		}
-		notify(step, true)
 	}
 
-	if err := s.git.Checkout(current); err != nil {
-		return fmt.Errorf("restore branch %s: %w", current, err)
-	}
-	return nil
+	return s.restoreBranch(current)
 }
