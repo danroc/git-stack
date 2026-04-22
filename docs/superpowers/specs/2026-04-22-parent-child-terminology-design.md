@@ -42,7 +42,7 @@ s.disc.IsChildOf(newParent, branch)
 
 ### 3. Comment Cleanup
 
-Replace spatial references in comments and doc comments with parent/child:
+Replace all spatial references (above/below) in comments and doc comments with parent/child. The examples below show the pattern; apply consistently across the entire codebase:
 
 | Current (in comments) | New |
 |----------------------|-----|
