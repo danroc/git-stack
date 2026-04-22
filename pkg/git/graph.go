@@ -309,9 +309,9 @@ func (g *Graph) MergeBase(a, b string) (string, bool) {
 	return base, base != ""
 }
 
-// ShortestPathLenToAncestor returns the shortest number of parent edges from descendant
-// to ancestor in the full DAG. The boolean is false when ancestor is not reachable.
-func (g *Graph) ShortestPathLenToAncestor(descendant, ancestor string) (int, bool) {
+// DistanceToAncestor returns the shortest number of parent edges from descendant to
+// ancestor in the full DAG. The boolean is false when ancestor is not reachable.
+func (g *Graph) DistanceToAncestor(descendant, ancestor string) (int, bool) {
 	if !g.Contains(descendant) || !g.Contains(ancestor) {
 		return 0, false
 	}

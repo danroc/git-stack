@@ -69,11 +69,11 @@ func TestRecordStackParent_StoresMergeBase(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	parent, ok := c.GetStackParent("feat-2")
+	parent, ok := c.StackParent("feat-2")
 	if !ok || parent != "feat-1" {
 		t.Fatalf("GetStackParent(feat-2) = %q (ok=%v), want feat-1", parent, ok)
 	}
-	mergeBase, ok := c.GetStackParentMergeBase("feat-2")
+	mergeBase, ok := c.StackMergeBase("feat-2")
 	if !ok {
 		t.Fatal("expected stored merge-base for feat-2")
 	}

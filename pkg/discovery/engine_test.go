@@ -300,13 +300,13 @@ func TestSetParent_StoresLastKnownMergeBase(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	parent, ok := e.git.GetStackParent("feat-2")
+	parent, ok := e.git.StackParent("feat-2")
 	if !ok || parent != "feat-1" {
 		t.Fatalf("stack parent = %q (ok=%v), want feat-1", parent, ok)
 	}
 
 	feat1Head, _ := graph.HeadOf("feat-1")
-	mergeBase, ok := e.git.GetStackParentMergeBase("feat-2")
+	mergeBase, ok := e.git.StackMergeBase("feat-2")
 	if !ok || mergeBase != feat1Head {
 		t.Fatalf("stack merge-base = %q (ok=%v), want %s", mergeBase, ok, feat1Head)
 	}

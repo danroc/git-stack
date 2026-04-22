@@ -129,9 +129,9 @@ func (g *Client) SetStackParentMergeBase(branch, mergeBase string) error {
 	return nil
 }
 
-// GetStackParent returns the configured stack parent, or ("", false) if unset.
-// All values are loaded in a single git config call on first use and cached.
-func (g *Client) GetStackParent(branch string) (string, bool) {
+// StackParent returns the configured stack parent, or ("", false) if unset. All values
+// are loaded in a single git config call on first use and cached.
+func (g *Client) StackParent(branch string) (string, bool) {
 	if g.stackParentCache == nil {
 		g.loadStackCaches()
 	}
@@ -139,19 +139,18 @@ func (g *Client) GetStackParent(branch string) (string, bool) {
 	return parent, ok
 }
 
-// GetStackParentMergeBase returns the stored last known merge-base for branch's stack
-// parent, or ("", false) if unset.
-func (g *Client) GetStackParentMergeBase(branch string) (string, bool) {
+// StackMergeBase returns the stored last known merge-base for branch's stack parent, or
+// ("", false) if unset.
+func (g *Client) StackMergeBase(branch string) (string, bool) {
 	if g.stackMergeBaseCache == nil {
 		g.loadStackCaches()
 	}
-	mergeBase, ok := g.stackMergeBaseCache[branch]
-	return mergeBase, ok
+	base, ok := g.stackMergeBaseCache[branch]
+	return base, ok
 }
 
 // RecordStackParent updates the configured parent relationship and snapshots the
-// current
-// merge-base at the same time. This is only for explicit user-driven mutations.
+// current merge-base at the same time. This is only for explicit user-driven mutations.
 func (g *Client) RecordStackParent(branch, parent string) error {
 	if err := g.SetStackParent(branch, parent); err != nil {
 		return err
@@ -186,10 +185,12 @@ func (g *Client) loadStackCaches() {
 		if !ok || !strings.EqualFold(section, "branch") {
 			continue
 		}
+
 		lastDot := strings.LastIndexByte(rest, '.')
 		if lastDot < 0 {
 			continue
 		}
+
 		branch := rest[:lastDot]
 		switch variable := rest[lastDot+1:]; {
 		case strings.EqualFold(variable, "stackparent"):
@@ -312,9 +313,9 @@ func (g *Client) CommitsAhead(parent, branch string) (int, error) {
 	return n, nil
 }
 
-// MergeBaseOctopus returns the best common ancestor of two or more refs, using
-// the octopus algorithm (same semantics as `git merge-base --octopus`). Returns
-// an error if any two refs have disjoint histories.
+// MergeBaseOctopus returns the best common ancestor of two or more refs, using the
+// octopus algorithm (same semantics as `git merge-base --octopus`). Returns an error if
+// any two refs have disjoint histories.
 func (g *Client) MergeBaseOctopus(refs ...string) (string, error) {
 	if len(refs) == 0 {
 		return "", fmt.Errorf("MergeBaseOctopus: no refs provided")

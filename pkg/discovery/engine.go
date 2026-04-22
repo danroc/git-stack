@@ -82,8 +82,8 @@ type BranchWithParent struct {
 }
 
 type candidateScore struct {
-	name       string
-	branchDist int
+	name string
+	dist int
 }
 
 // DiscoverStack identifies the full linear stack that contains currentBranch.
@@ -343,7 +343,7 @@ func (e *Engine) resolveParent(branch string) (string, error) {
 	if branch == e.base {
 		return "", fmt.Errorf("branch %q has no parent in the stack", branch)
 	}
-	if parent, ok := e.git.GetStackParent(branch); ok {
+	if parent, ok := e.git.StackParent(branch); ok {
 		return parent, nil
 	}
 	if parent, ok := e.inferParent(branch); ok {
@@ -363,7 +363,7 @@ func (e *Engine) inferParent(branch string) (string, bool) {
 		if candidate == branch {
 			continue
 		}
-		if cfgParent, ok := e.git.GetStackParent(candidate); ok && cfgParent == branch {
+		if cfgParent, ok := e.git.StackParent(candidate); ok && cfgParent == branch {
 			continue
 		}
 		candidateHead, ok := e.graph.HeadOf(candidate)
@@ -374,14 +374,14 @@ func (e *Engine) inferParent(branch string) (string, bool) {
 		if !ok || base != candidateHead {
 			continue
 		}
-		dist, ok := e.graph.ShortestPathLenToAncestor(branchHead, base)
+		dist, ok := e.graph.DistanceToAncestor(branchHead, base)
 		if !ok {
 			continue
 		}
 
 		score := candidateScore{
-			name:       candidate,
-			branchDist: dist,
+			name: candidate,
+			dist: dist,
 		}
 		if best == nil || isBetterCandidate(score, *best) {
 			best = &score
@@ -394,18 +394,18 @@ func (e *Engine) inferParent(branch string) (string, bool) {
 }
 
 func isBetterCandidate(a, b candidateScore) bool {
-	if a.branchDist != b.branchDist {
-		return a.branchDist < b.branchDist
+	if a.dist != b.dist {
+		return a.dist < b.dist
 	}
 	return a.name < b.name
 }
 
 func (e *Engine) hasDrift(branch string) bool {
-	parent, ok := e.git.GetStackParent(branch)
+	parent, ok := e.git.StackParent(branch)
 	if !ok {
 		return false
 	}
-	storedBase, ok := e.git.GetStackParentMergeBase(branch)
+	storedBase, ok := e.git.StackMergeBase(branch)
 	if !ok || storedBase == "" {
 		return false
 	}
