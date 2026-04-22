@@ -152,10 +152,16 @@ type CommitsBetweenResult struct {
 	Behind int
 }
 
-// Contains reports whether hash is in the loaded graph (at or above the floor commit —
+// HasHash reports whether hash is in the loaded graph (at or above the floor commit —
 // the octopus merge-base of all branch heads).
-func (g *Graph) Contains(hash string) bool {
+func (g *Graph) HasHash(hash string) bool {
 	_, ok := g.parents[hash]
+	return ok
+}
+
+// HasBranch reports whether branch is in the loaded graph.
+func (g *Graph) HasBranch(branch string) bool {
+	_, ok := g.heads[branch]
 	return ok
 }
 
@@ -200,7 +206,7 @@ func (g *Graph) FirstParent(hash string) (string, bool) {
 // - depth is the shortest number of parent edges from start to the visited commit
 // - traversal stops immediately when visit returns false
 func (g *Graph) Traverse(start string, visit func(hash string, depth int) bool) {
-	if !g.Contains(start) {
+	if !g.HasHash(start) {
 		return
 	}
 
@@ -294,7 +300,7 @@ func (g *Graph) countStepsToAncestor(hash, target string) int {
 // order. The first marked commit found during b's BFS is returned, which makes the
 // result the closest common ancestor to b under this traversal.
 func (g *Graph) MergeBase(a, b string) (string, bool) {
-	if !g.Contains(a) || !g.Contains(b) {
+	if !g.HasHash(a) || !g.HasHash(b) {
 		return "", false
 	}
 
@@ -318,7 +324,7 @@ func (g *Graph) MergeBase(a, b string) (string, bool) {
 // DistanceToAncestor returns the shortest number of parent edges from descendant to
 // ancestor in the full DAG. The boolean is false when ancestor is not reachable.
 func (g *Graph) DistanceToAncestor(descendant, ancestor string) (int, bool) {
-	if !g.Contains(descendant) || !g.Contains(ancestor) {
+	if !g.HasHash(descendant) || !g.HasHash(ancestor) {
 		return 0, false
 	}
 

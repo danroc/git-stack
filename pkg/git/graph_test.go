@@ -43,7 +43,7 @@ func TestGraph_Contains(t *testing.T) {
 		{"c99", false}, // missing
 	}
 	for _, tt := range tests {
-		if got := g.Contains(tt.hash); got != tt.want {
+		if got := g.HasHash(tt.hash); got != tt.want {
 			t.Errorf("Contains(%q) = %v, want %v", tt.hash, got, tt.want)
 		}
 	}
@@ -406,15 +406,15 @@ func TestLoadGraph_IncludesBaseDownToFloor(t *testing.T) {
 	}
 
 	// Floor commit (c0) must now be contained.
-	if !graph.Contains(fork) {
+	if !graph.HasHash(fork) {
 		t.Errorf("graph must contain floor commit %s (fork point)", fork)
 	}
 	// Base-above-floor commits (m1, m2) must be contained.
-	if !graph.Contains(mainTip) {
+	if !graph.HasHash(mainTip) {
 		t.Errorf("graph must contain main tip %s", mainTip)
 	}
 	// Feature tip must be contained.
-	if !graph.Contains(featTip) {
+	if !graph.HasHash(featTip) {
 		t.Errorf("graph must contain feat-1 tip %s", featTip)
 	}
 }
