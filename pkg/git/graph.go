@@ -27,6 +27,7 @@ func (g *Client) LoadGraph() (*Graph, error) {
 	return g.buildGraph(heads)
 }
 
+// listBranchHeads returns a map of local branch names to their HEAD commit hashes.
 func (g *Client) listBranchHeads() (map[string]string, error) {
 	out, err := g.run(
 		"for-each-ref",
@@ -50,6 +51,9 @@ func (g *Client) listBranchHeads() (map[string]string, error) {
 	return heads, scanner.Err()
 }
 
+// buildGraph constructs an in-memory commit DAG from the given branch heads. It computes
+// the floor (octopus merge-base of all heads), loads all commits at or above the floor,
+// and maps commits to the branches pointing at them.
 func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 	graph := &Graph{
 		parents:    make(map[string][]string),
@@ -107,6 +111,8 @@ func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 	return graph, nil
 }
 
+// parseParentLines parses git log --format=%P output into a map of commit hash to
+// parent hashes. Each line is "hash parent1 [parent2 ...]".
 func parseParentLines(out string) (map[string][]string, error) {
 	parents := make(map[string][]string)
 	scanner := bufio.NewScanner(strings.NewReader(out))

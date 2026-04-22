@@ -39,6 +39,8 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error { return e.Err }
 
+// run executes a git command with the given args in the client's working directory,
+// returning trimmed stdout. On non-zero exit it returns a trimmed stderr and an Error.
 func (g *Client) run(args ...string) (string, error) {
 	var (
 		stdout bytes.Buffer
@@ -163,7 +165,8 @@ func (g *Client) RecordStackParent(branch, parent string) error {
 }
 
 // loadStackCaches loads all branch.*.stackParent and branch.*.stackParentMergeBase
-// entries from local git config in a single subprocess call.
+// entries from local git config in a single subprocess call, caching them for fast
+// lookup by StackParent and StackMergeBase.
 func (g *Client) loadStackCaches() {
 	g.stackParentCache = make(map[string]string)
 	g.stackMergeBaseCache = make(map[string]string)
@@ -324,7 +327,8 @@ func (g *Client) MergeBaseOctopus(refs ...string) (string, error) {
 	return g.run(args...)
 }
 
-// commitHasParent reports whether hash has at least one parent commit.
+// commitHasParent reports whether hash has at least one parent commit. A root commit
+// has no parents.
 func (g *Client) commitHasParent(hash string) (bool, error) {
 	out, err := g.run("rev-list", "--parents", "-n", "1", hash)
 	if err != nil {

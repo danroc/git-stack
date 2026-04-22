@@ -420,7 +420,7 @@ func (e *Engine) inferParent(branch string) (string, bool) {
 }
 
 // isBetterCandidate reports whether a is a better candidate than b, preferring smaller
-// distance (closer to branch) then alphabetically earlier name as a tiebreaker.
+// distance (closer to branch) than alphabetically earlier name as a tiebreaker.
 func isBetterCandidate(a, b candidateScore) bool {
 	if a.dist != b.dist {
 		return a.dist < b.dist
