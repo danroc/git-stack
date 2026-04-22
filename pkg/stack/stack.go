@@ -160,10 +160,9 @@ func (s *Stack) Rebase(fn NotifyFn) error {
 	})
 }
 
-func (s *Stack) checkoutAndSetParent(
-	branch, parent string,
-	rebase func() error,
-) error {
+// rebaseAndSetParent checks out branch, runs the supplied rebase operation, and records
+// parent in stack metadata.
+func (s *Stack) rebaseAndSetParent(branch, parent string, rebase func() error) error {
 	if err := s.git.Checkout(branch); err != nil {
 		return fmt.Errorf("checkout %s: %w", branch, err)
 	}
@@ -179,7 +178,7 @@ func (s *Stack) checkoutAndSetParent(
 // checkoutAndRebase checks out branch, rebases it onto parent, and records the parent
 // in stack metadata.
 func (s *Stack) checkoutAndRebase(branch, parent string) error {
-	return s.checkoutAndSetParent(branch, parent, func() error {
+	return s.rebaseAndSetParent(branch, parent, func() error {
 		if err := s.git.Rebase(parent); err != nil {
 			return fmt.Errorf("rebase %s onto %s: %w", branch, parent, err)
 		}
@@ -190,7 +189,7 @@ func (s *Stack) checkoutAndRebase(branch, parent string) error {
 // checkoutAndRebaseOnto checks out branch, rebases it from oldParent onto newParent,
 // and records the new parent in stack metadata.
 func (s *Stack) checkoutAndRebaseOnto(branch, oldParent, newParent string) error {
-	return s.checkoutAndSetParent(branch, newParent, func() error {
+	return s.rebaseAndSetParent(branch, newParent, func() error {
 		if err := s.git.RebaseOnto(newParent, oldParent, branch); err != nil {
 			return fmt.Errorf(
 				"move %s from %s to %s: %w", branch, oldParent, newParent, err,
