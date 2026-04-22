@@ -226,7 +226,7 @@ func (e *Engine) Parent(branch string) (string, error) {
 	return e.resolveParent(branch)
 }
 
-// IsChildOf reports whether child is a direct or transitive child of parent
+// IsChildOf reports whether child is a transitive child of parent
 // in the resolved stack tree (i.e., child is strictly below parent).
 func (e *Engine) IsChildOf(child, parent string) bool {
 	if child == parent {
