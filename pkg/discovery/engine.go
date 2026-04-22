@@ -394,7 +394,8 @@ func (e *Engine) inferParent(branch string) (string, bool) {
 		if candidate == branch {
 			continue
 		}
-		if cfgParent, ok := e.git.StackParent(candidate); ok && cfgParent == branch {
+		cfgParent, ok := e.git.StackParent(candidate)
+		if ok && cfgParent == branch {
 			continue
 		}
 		candidateHead, ok := e.graph.HeadOf(candidate)
