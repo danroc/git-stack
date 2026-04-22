@@ -21,6 +21,7 @@ type palette struct {
 	reset     string
 }
 
+// colorPalette returns a palette with ANSI color codes for terminal output.
 func colorPalette() palette {
 	return palette{
 		branch:    bold + green,
@@ -31,6 +32,7 @@ func colorPalette() palette {
 	}
 }
 
+// plainPalette returns a palette with all fields empty (no styling).
 func plainPalette() palette {
 	return palette{}
 }
