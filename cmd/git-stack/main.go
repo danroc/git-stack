@@ -55,8 +55,11 @@ func resolveBase() (*git.Client, string, error) {
 	return g, base, nil
 }
 
-// runStackCmd is a RunE handler that resolves the base, builds a Stack, and calls fn.
-func runStackCmd(fn func(*stack.Stack) error) func(*cobra.Command, []string) error {
+// runStackCmd is a RunE handler that resolves the base, builds a Stack, and calls fn
+// with both the Git client and Stack.
+func runStackCmd(
+	fn func(*git.Client, *stack.Stack) error,
+) func(*cobra.Command, []string) error {
 	return func(_ *cobra.Command, _ []string) error {
 		g, base, err := resolveBase()
 		if err != nil {
@@ -66,7 +69,7 @@ func runStackCmd(fn func(*stack.Stack) error) func(*cobra.Command, []string) err
 		if err != nil {
 			return err
 		}
-		return fn(s)
+		return fn(g, s)
 	}
 }
 
@@ -101,6 +104,14 @@ func printGitStderr(err error) {
 	if errors.As(err, &gitErr) && gitErr.Stderr != "" {
 		_, _ = fmt.Fprintf(os.Stderr, "\n%s\n\n", gitErr.Stderr)
 	}
+}
+
+func runAndPrintGitStderr(fn func() error) error {
+	err := fn()
+	if err != nil {
+		printGitStderr(err)
+	}
+	return err
 }
 
 func cmdAdd() *cobra.Command {
@@ -161,28 +172,42 @@ func buildDisplayTree(node *discovery.TreeNode, current string) *ui.TreeEntry {
 	return entry
 }
 
-func cmdPush() *cobra.Command {
+func cmdStackAction(
+	use, short, verb string,
+	method func(*stack.Stack, stack.NotifyFn) error,
+) *cobra.Command {
 	return &cobra.Command{
-		Use:   "push",
-		Short: "Push all branches in the stack to their upstreams",
-		RunE:  stackRunE("Pushing", (*stack.Stack).Push),
+		Use:   use,
+		Short: short,
+		RunE:  stackRunE(verb, method),
 	}
+}
+
+func cmdPush() *cobra.Command {
+	return cmdStackAction(
+		"push",
+		"Push all branches in the stack to their upstreams",
+		"Pushing",
+		(*stack.Stack).Push,
+	)
 }
 
 func cmdPull() *cobra.Command {
-	return &cobra.Command{
-		Use:   "pull",
-		Short: "Pull all branches in the stack from their upstreams",
-		RunE:  stackRunE("Pulling", (*stack.Stack).Pull),
-	}
+	return cmdStackAction(
+		"pull",
+		"Pull all branches in the stack from their upstreams",
+		"Pulling",
+		(*stack.Stack).Pull,
+	)
 }
 
 func cmdRebase() *cobra.Command {
-	return &cobra.Command{
-		Use:   "rebase",
-		Short: "Rebase each branch in the stack onto the tip of its parent, bottom-to-top",
-		RunE:  stackRunE("Rebasing", (*stack.Stack).Rebase),
-	}
+	return cmdStackAction(
+		"rebase",
+		"Rebase each branch in the stack onto the tip of its parent, bottom-to-top",
+		"Rebasing",
+		(*stack.Stack).Rebase,
+	)
 }
 
 // stackRunE builds a RunE that resolves the stack, calls method with a step printer,
@@ -191,13 +216,26 @@ func stackRunE(
 	verb string,
 	method func(*stack.Stack, stack.NotifyFn) error,
 ) func(*cobra.Command, []string) error {
-	return runStackCmd(func(s *stack.Stack) error {
-		err := method(s, stepPrinter(os.Stdout, verb))
-		if err != nil {
-			printGitStderr(err)
-		}
-		return err
+	return runStackCmd(func(_ *git.Client, s *stack.Stack) error {
+		return runAndPrintGitStderr(func() error {
+			return method(s, stepPrinter(os.Stdout, verb))
+		})
 	})
+}
+
+func resolveMoveArgs(
+	g *git.Client,
+	args []string,
+) (branch, newParent string, err error) {
+	if len(args) == 2 {
+		return args[0], args[1], nil
+	}
+
+	branch, err = g.CurrentBranch()
+	if err != nil {
+		return "", "", err
+	}
+	return branch, args[0], nil
 }
 
 func cmdMove() *cobra.Command {
@@ -205,32 +243,17 @@ func cmdMove() *cobra.Command {
 		Use:   "move [branch] <new-parent>",
 		Short: "Move a branch to a different parent, rebasing it and its children",
 		Args:  cobra.RangeArgs(1, 2),
-		RunE: func(_ *cobra.Command, args []string) error {
-			g, base, err := resolveBase()
-			if err != nil {
-				return err
-			}
-			s, err := stack.New(g, base)
-			if err != nil {
-				return err
-			}
-
-			var branch, newParent string
-			if len(args) == 2 {
-				branch, newParent = args[0], args[1]
-			} else {
-				newParent = args[0]
-				branch, err = g.CurrentBranch()
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runStackCmd(func(g *git.Client, s *stack.Stack) error {
+				branch, newParent, err := resolveMoveArgs(g, args)
 				if err != nil {
 					return err
 				}
-			}
 
-			err = s.Move(branch, newParent, stepPrinter(os.Stdout, "Rebasing"))
-			if err != nil {
-				printGitStderr(err)
-			}
-			return err
+				return runAndPrintGitStderr(func() error {
+					return s.Move(branch, newParent, stepPrinter(os.Stdout, "Rebasing"))
+				})
+			})(cmd, args)
 		},
 	}
 }
