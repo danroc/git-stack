@@ -190,8 +190,8 @@ func (e *Engine) BuildTree() *TreeNode {
 	return root
 }
 
-// buildChildren recursively populates node.Children with direct child branches, computing
-// ahead/behind counts and drift status for each.
+// buildChildren recursively populates node.Children with direct child branches,
+// computing ahead/behind counts and drift status for each.
 func (e *Engine) buildChildren(node *TreeNode) {
 	for _, child := range e.directChildren(node.Branch.Name) {
 		childHash, _ := e.graph.HeadOf(child)
@@ -235,8 +235,8 @@ func (e *Engine) Parent(branch string) (string, error) {
 	return e.resolveParent(branch)
 }
 
-// IsChildOf reports whether child is a transitive child of parent
-// in the resolved stack tree (i.e., child is strictly below parent).
+// IsChildOf reports whether child is a transitive child of parent in the resolved stack
+// tree (i.e., child is strictly below parent).
 func (e *Engine) IsChildOf(child, parent string) bool {
 	if child == parent {
 		return false
@@ -284,8 +284,8 @@ func (e *Engine) SetParent(branch, parent string) error {
 	return e.git.SetStackParentMergeBase(branch, base)
 }
 
-// findTreeNode searches the tree rooted at root for a node with the given name, returning
-// it or nil if not found.
+// findTreeNode searches the tree rooted at root for a node with the given name,
+// returning it or nil if not found.
 func findTreeNode(root *TreeNode, name string) *TreeNode {
 	if root.Branch.Name == name {
 		return root
@@ -316,10 +316,10 @@ func collectSubtreeChildren(node *TreeNode, parent string, result *[]BranchWithP
 
 var errStopWalk = fmt.Errorf("stop walk")
 
-// walkResolvedParents walks the parent chain from branch up to (but not including) e.base,
-// calling visit for each resolved parent. Returns an error if a cycle is detected or
-// a parent cannot be resolved. If visit returns a non-nil error, that error is returned
-// immediately.
+// walkResolvedParents walks the parent chain from branch up to (but not including)
+// e.base, calling visit for each resolved parent. Returns an error if a cycle is
+// detected or a parent cannot be resolved. If visit returns a non-nil error, that error
+// is returned immediately.
 func (e *Engine) walkResolvedParents(
 	branch string,
 	visit func(parent string) error,
@@ -345,8 +345,8 @@ func (e *Engine) walkResolvedParents(
 	return nil
 }
 
-// mustHeadOf returns the commit hash for branch, returning an error if the branch is not
-// present in the graph.
+// mustHeadOf returns the commit hash for branch, returning an error if the branch is
+// not present in the graph.
 func (e *Engine) mustHeadOf(branch string) (string, error) {
 	head, ok := e.graph.HeadOf(branch)
 	if !ok {
@@ -355,7 +355,8 @@ func (e *Engine) mustHeadOf(branch string) (string, error) {
 	return head, nil
 }
 
-// resolveParent returns the immediate stack parent of branch using a three-tier fallback:
+// resolveParent returns the immediate stack parent of branch using a three-tier
+// fallback:
 // 1. stored config (branch.<name>.stackParent)
 // 2. graph-based inference via inferParent
 // 3. e.base as the ultimate fallback
@@ -376,8 +377,8 @@ func (e *Engine) resolveParent(branch string) (string, error) {
 }
 
 // inferParent finds the best candidate parent for branch among all known branches by
-// checking which branch head is a merge-base ancestor of branch's head. Among ties,
-// the closest (fewest first-parent steps) is chosen; further ties broken alphabetically.
+// checking which branch head is a merge-base ancestor of branch's head. Among ties, the
+// closest (fewest first-parent steps) is chosen; further ties broken alphabetically.
 func (e *Engine) inferParent(branch string) (string, bool) {
 	branchHead, ok := e.graph.HeadOf(branch)
 	if !ok {
@@ -428,9 +429,9 @@ func isBetterCandidate(a, b candidateScore) bool {
 	return a.name < b.name
 }
 
-// hasDrift reports whether branch has been modified outside the stack workflow since its
-// parent was last recorded. It returns true when the current merge-base of branch and
-// its parent differs from the stored merge-base.
+// hasDrift reports whether branch has been modified outside the stack workflow since
+// its parent was last recorded. It returns true when the current merge-base of branch
+// and its parent differs from the stored merge-base.
 func (e *Engine) hasDrift(branch string) bool {
 	parent, ok := e.git.StackParent(branch)
 	if !ok {

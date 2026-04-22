@@ -51,9 +51,9 @@ func (g *Client) listBranchHeads() (map[string]string, error) {
 	return heads, scanner.Err()
 }
 
-// buildGraph constructs an in-memory commit DAG from the given branch heads. It computes
-// the floor (octopus merge-base of all heads), loads all commits at or above the floor,
-// and maps commits to the branches pointing at them.
+// buildGraph constructs an in-memory commit DAG from the given branch heads. It
+// computes the floor (octopus merge-base of all heads), loads all commits at or above
+// the floor, and maps commits to the branches pointing at them.
 func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 	graph := &Graph{
 		parents:    make(map[string][]string),

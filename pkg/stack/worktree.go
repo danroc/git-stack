@@ -67,7 +67,8 @@ func (w *worktreeGitOps) Pull() error {
 	return err
 }
 
-// Rebase rebases in the active worktree context, wrapping errors with worktree path info.
+// Rebase rebases in the active worktree context, wrapping errors with worktree path
+// info.
 func (w *worktreeGitOps) Rebase(onto string) error {
 	err := w.active.Rebase(onto)
 	if err != nil && w.activeDir != "" {
