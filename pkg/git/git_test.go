@@ -182,3 +182,48 @@ func TestParseBranchConfigKey(t *testing.T) {
 		})
 	}
 }
+
+func TestResetStackConfig_RemovesAllEntries(t *testing.T) {
+	c, dir := initRepo(t)
+	runGit(t, dir, "checkout", "-q", "-b", "feat-1")
+	runGit(t, dir, "commit", "--allow-empty", "-m", "c1")
+	runGit(t, dir, "checkout", "-q", "-b", "feat-2")
+	runGit(t, dir, "commit", "--allow-empty", "-m", "c2")
+
+	// Set up stack config for both branches.
+	if err := c.RecordStackParent("feat-1", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.RecordStackParent("feat-2", "feat-1"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a fresh client so the cache is reloaded after reset.
+	branches, err := c.ResetStackConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify the returned branch list.
+	if len(branches) != 2 {
+		t.Fatalf("got %d branches, want 2", len(branches))
+	}
+	if branches[0] != "feat-1" || branches[1] != "feat-2" {
+		t.Fatalf("branches = %v, want [feat-1 feat-2]", branches)
+	}
+
+	// Verify config is actually gone by reloading.
+	c2 := NewClient(dir)
+	if _, ok := c2.StackParent("feat-1"); ok {
+		t.Error("feat-1 stackParent should be unset")
+	}
+	if _, ok := c2.StackParent("feat-2"); ok {
+		t.Error("feat-2 stackParent should be unset")
+	}
+	if _, ok := c2.StackMergeBase("feat-1"); ok {
+		t.Error("feat-1 stackParentMergeBase should be unset")
+	}
+	if _, ok := c2.StackMergeBase("feat-2"); ok {
+		t.Error("feat-2 stackParentMergeBase should be unset")
+	}
+}
