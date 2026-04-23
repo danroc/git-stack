@@ -223,7 +223,19 @@ func TestResetStackConfig_RemovesAllEntries(t *testing.T) {
 	if _, ok := c2.StackMergeBase("feat-1"); ok {
 		t.Error("feat-1 stackParentMergeBase should be unset")
 	}
-	if _, ok := c2.StackMergeBase("feat-2"); ok {
-		t.Error("feat-2 stackParentMergeBase should be unset")
-	}
+    if _, ok := c2.StackMergeBase("feat-2"); ok {
+        t.Error("feat-2 stackParentMergeBase should be unset")
+    }
+}
+
+func TestResetStackConfig_NoOpWhenEmpty(t *testing.T) {
+        c, _ := initRepo(t)
+
+        branches, err := c.ResetStackConfig()
+        if err != nil {
+                t.Fatal(err)
+        }
+        if len(branches) != 0 {
+                t.Fatalf("got %d branches, want 0", len(branches))
+        }
 }
