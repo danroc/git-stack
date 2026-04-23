@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"sort"
 	"strings"
 )
 
@@ -196,6 +197,51 @@ func (g *Client) loadStackCaches() {
 
 	g.stackParentCache = parentCache
 	g.stackMergeBaseCache = mergeBaseCache
+}
+
+// ResetStackConfig removes all stackParent and stackParentMergeBase config entries
+// from the local git config. Returns the sorted list of branches that had entries
+// removed, or an empty slice if none were found.
+func (g *Client) ResetStackConfig() ([]string, error) {
+	out, err := g.run("config", "--local", "--list")
+	if err != nil {
+		return nil, err
+	}
+
+	affected := make(map[string]struct{})
+
+	for line := range strings.SplitSeq(out, "\n") {
+		key, _, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		branch, variable, ok := parseBranchConfigKey(key)
+		if !ok {
+			continue
+		}
+		switch {
+		case strings.EqualFold(variable, "stackParent"):
+			affected[branch] = struct{}{}
+		case strings.EqualFold(variable, "stackParentMergeBase"):
+			affected[branch] = struct{}{}
+		}
+	}
+
+	if len(affected) == 0 {
+		return nil, nil
+	}
+
+	for branch := range affected {
+		_, _ = g.run("config", "--local", "--unset", "branch."+branch+".stackParent")
+		_, _ = g.run("config", "--local", "--unset", "branch."+branch+".stackParentMergeBase")
+	}
+
+	result := make([]string, 0, len(affected))
+	for branch := range affected {
+		result = append(result, branch)
+	}
+	sort.Strings(result)
+	return result, nil
 }
 
 // parseBranchConfigKey extracts branch name and variable from a key with shape
