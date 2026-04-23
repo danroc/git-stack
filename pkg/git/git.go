@@ -7,8 +7,9 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"maps"
 	"os/exec"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -62,6 +63,16 @@ func (g *Client) run(args ...string) (string, error) {
 		}
 	}
 	return strings.TrimSpace(stdout.String()), nil
+}
+
+// isOneOf reports whether v equals any of the given values.
+func isOneOf[T comparable](v T, values ...T) bool {
+	for _, w := range values {
+		if v == w {
+			return true
+		}
+	}
+	return false
 }
 
 // isExitCode reports whether err wraps an exec.ExitError with the given code.
@@ -219,7 +230,7 @@ func (g *Client) ResetStackConfig() ([]string, error) {
 		return nil, err
 	}
 
-	affected := make(map[string]struct{})
+	branches := make(map[string]bool)
 
 	for _, line := range splitLines(out) {
 		key, _, ok := strings.Cut(line, "=")
@@ -230,19 +241,15 @@ func (g *Client) ResetStackConfig() ([]string, error) {
 		if !ok {
 			continue
 		}
-		switch {
-		case strings.EqualFold(variable, "stackParent"):
-			affected[branch] = struct{}{}
-		case strings.EqualFold(variable, "stackParentMergeBase"):
-			affected[branch] = struct{}{}
+		if isOneOf(strings.ToLower(variable), "stackparent", "stackparentmergebase") {
+			branches[branch] = true
 		}
 	}
-
-	if len(affected) == 0 {
+	if len(branches) == 0 {
 		return nil, nil
 	}
 
-	for branch := range affected {
+	for branch := range branches {
 		if _, err := g.run(
 			"config",
 			"--local",
@@ -268,12 +275,7 @@ func (g *Client) ResetStackConfig() ([]string, error) {
 	g.stackParentCache = nil
 	g.stackMergeBaseCache = nil
 
-	result := make([]string, 0, len(affected))
-	for branch := range affected {
-		result = append(result, branch)
-	}
-	sort.Strings(result)
-	return result, nil
+	return slices.Sorted(maps.Keys(branches)), nil
 }
 
 // parseBranchConfigKey extracts branch name and variable from a key with shape
