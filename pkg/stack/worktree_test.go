@@ -3,7 +3,7 @@ package stack
 import (
 	"testing"
 
-	"git-stack/pkg/git"
+	"github.com/danroc/git-stack/pkg/git"
 )
 
 func TestParseWorktreeList(t *testing.T) {

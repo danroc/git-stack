@@ -7,10 +7,10 @@ import (
 	"io"
 	"os"
 
-	"git-stack/pkg/discovery"
-	"git-stack/pkg/git"
-	"git-stack/pkg/stack"
-	"git-stack/pkg/ui"
+	"github.com/danroc/git-stack/pkg/discovery"
+	"github.com/danroc/git-stack/pkg/git"
+	"github.com/danroc/git-stack/pkg/stack"
+	"github.com/danroc/git-stack/pkg/ui"
 
 	"github.com/spf13/cobra"
 )

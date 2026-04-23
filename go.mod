@@ -1,4 +1,4 @@
-module git-stack
+module github.com/danroc/git-stack
 
 go 1.26.2
 

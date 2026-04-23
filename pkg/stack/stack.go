@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"git-stack/pkg/discovery"
-	"git-stack/pkg/git"
-	"git-stack/pkg/ui"
+	"github.com/danroc/git-stack/pkg/discovery"
+	"github.com/danroc/git-stack/pkg/git"
+	"github.com/danroc/git-stack/pkg/ui"
 )
 
 // Repository abstracts the git operations that stack commands need. Satisfied by
