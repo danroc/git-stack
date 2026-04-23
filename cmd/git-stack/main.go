@@ -33,6 +33,7 @@ func main() {
 		cmdPush(),
 		cmdPull(),
 		cmdRebase(),
+		cmdReset(),
 	)
 
 	if err := root.Execute(); err != nil {
@@ -236,6 +237,24 @@ func resolveMoveArgs(
 		return "", "", err
 	}
 	return branch, args[0], nil
+}
+
+func cmdReset() *cobra.Command {
+	return &cobra.Command{
+		Use:   "reset",
+		Short: "Remove all saved stack config from the local git config",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			g := git.NewClient(".")
+			branches, err := g.ResetStackConfig()
+			if err != nil {
+				return err
+			}
+			for _, branch := range branches {
+				fmt.Fprintf(os.Stdout, "Removing stack config for %s\n", branch)
+			}
+			return nil
+		},
+	}
 }
 
 func cmdMove() *cobra.Command {
