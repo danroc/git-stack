@@ -268,7 +268,6 @@ func cmdMove() *cobra.Command {
 				if err != nil {
 					return err
 				}
-
 				return runAndPrintGitStderr(func() error {
 					return s.Move(branch, newParent, stepPrinter(os.Stdout, "Rebasing"))
 				})
