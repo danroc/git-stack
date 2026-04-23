@@ -271,7 +271,7 @@ func TestBuildTree_MarksDriftWithoutCorrectingParent(t *testing.T) {
 	if err := e.git.SetStackParent("feat-2", "feat-1"); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.git.SetStackParentMergeBase("feat-2", "c0"); err != nil {
+	if err := e.git.SetStackMergeBase("feat-2", "c0"); err != nil {
 		t.Fatal(err)
 	}
 

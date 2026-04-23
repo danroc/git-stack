@@ -136,13 +136,13 @@ func (g *Client) SetStackParent(branch, parent string) error {
 	return nil
 }
 
-// SetStackParentMergeBase records the last known merge-base for branch's configured
+// SetStackMergeBase records the last known merge-base for branch's configured
 // stack parent in local git config.
-func (g *Client) SetStackParentMergeBase(branch, mergeBase string) error {
+func (g *Client) SetStackMergeBase(branch, mergeBase string) error {
 	_, err := g.run(
 		"config",
 		"--local",
-		"branch."+branch+".stackParentMergeBase",
+		"branch."+branch+".stackMergeBase",
 		mergeBase,
 	)
 	if err != nil {
@@ -184,10 +184,10 @@ func (g *Client) RecordStackParent(branch, parent string) error {
 	if err != nil {
 		return err
 	}
-	return g.SetStackParentMergeBase(branch, mergeBase)
+	return g.SetStackMergeBase(branch, mergeBase)
 }
 
-// loadStackCaches loads all branch.*.stackParent and branch.*.stackParentMergeBase
+// loadStackCaches loads all branch.*.stackParent and branch.*.stackMergeBase
 // entries from local git config in a single subprocess call, caching them for fast
 // lookup by StackParent and StackMergeBase.
 func (g *Client) loadStackCaches() {
@@ -212,7 +212,7 @@ func (g *Client) loadStackCaches() {
 		switch {
 		case strings.EqualFold(variable, "stackParent"):
 			parentCache[branch] = value
-		case strings.EqualFold(variable, "stackParentMergeBase"):
+		case strings.EqualFold(variable, "stackMergeBase"):
 			mergeBaseCache[branch] = value
 		}
 	}
@@ -221,7 +221,7 @@ func (g *Client) loadStackCaches() {
 	g.stackMergeBaseCache = mergeBaseCache
 }
 
-// ResetStackConfig removes all stackParent and stackParentMergeBase config entries
+// ResetStackConfig removes all stackParent and stackMergeBase config entries
 // from the local git config. Returns the sorted list of branches that had entries
 // removed, or an empty slice if none were found.
 func (g *Client) ResetStackConfig() ([]string, error) {
@@ -241,7 +241,7 @@ func (g *Client) ResetStackConfig() ([]string, error) {
 		if !ok {
 			continue
 		}
-		if isOneOf(strings.ToLower(variable), "stackparent", "stackparentmergebase") {
+		if isOneOf(strings.ToLower(variable), "stackparent", "stackmergebase") {
 			branches[branch] = true
 		}
 	}
@@ -264,7 +264,7 @@ func (g *Client) ResetStackConfig() ([]string, error) {
 			"config",
 			"--local",
 			"--unset",
-			"branch."+branch+".stackParentMergeBase",
+			"branch."+branch+".stackMergeBase",
 		); err != nil {
 			if !isExitCode(err, 1) && !isExitCode(err, 5) {
 				return nil, err
