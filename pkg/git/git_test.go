@@ -81,3 +81,101 @@ func TestRecordStackParent_StoresMergeBase(t *testing.T) {
 		t.Fatalf("merge-base = %q, want feat-1 head", mergeBase)
 	}
 }
+
+func TestStackParent_RetriesAfterInitialConfigFailure(t *testing.T) {
+	dir := t.TempDir()
+	c := NewClient(dir)
+
+	if parent, ok := c.StackParent("feat-2"); ok || parent != "" {
+		t.Fatalf("initial StackParent = %q (ok=%v), want empty and false", parent, ok)
+	}
+
+	// Turn the directory into a git repo after the first failed lookup.
+	runGit(t, dir, "init", "-q", "-b", "main")
+	runGit(t, dir, "config", "user.email", "test@example.com")
+	runGit(t, dir, "config", "user.name", "Test")
+	runGit(t, dir, "config", "branch.feat-2.stackParent", "feat-1")
+
+	parent, ok := c.StackParent("feat-2")
+	if !ok || parent != "feat-1" {
+		t.Fatalf("StackParent(feat-2) = %q (ok=%v), want feat-1", parent, ok)
+	}
+}
+
+func TestParseBranchConfigKey(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		key        string
+		wantBranch string
+		wantVar    string
+		wantOK     bool
+	}{
+		{
+			name:       "basic stack parent key",
+			key:        "branch.feature.stackParent",
+			wantBranch: "feature",
+			wantVar:    "stackParent",
+			wantOK:     true,
+		},
+		{
+			name:       "branch name with dots",
+			key:        "branch.feature.foo.stackParentMergeBase",
+			wantBranch: "feature.foo",
+			wantVar:    "stackParentMergeBase",
+			wantOK:     true,
+		},
+		{
+			name:       "section matching is case insensitive",
+			key:        "Branch.Feature.STACKPARENT",
+			wantBranch: "Feature",
+			wantVar:    "STACKPARENT",
+			wantOK:     true,
+		},
+		{
+			name:   "non branch section",
+			key:    "remote.origin.url",
+			wantOK: false,
+		},
+		{
+			name:   "empty branch name",
+			key:    "branch..stackParent",
+			wantOK: false,
+		},
+		{
+			name:   "missing variable",
+			key:    "branch.feature.",
+			wantOK: false,
+		},
+		{
+			name:   "missing section delimiter",
+			key:    "branchfeature.stackParent",
+			wantOK: false,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			branch, variable, ok := parseBranchConfigKey(tc.key)
+			if ok != tc.wantOK {
+				t.Fatalf("parseBranchConfigKey(%q) ok=%v, want %v", tc.key, ok, tc.wantOK)
+			}
+			if !ok {
+				return
+			}
+			if branch != tc.wantBranch || variable != tc.wantVar {
+				t.Fatalf(
+					"parseBranchConfigKey(%q) = (%q, %q), want (%q, %q)",
+					tc.key,
+					branch,
+					variable,
+					tc.wantBranch,
+					tc.wantVar,
+				)
+			}
+		})
+	}
+}

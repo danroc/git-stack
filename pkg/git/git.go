@@ -168,8 +168,8 @@ func (g *Client) RecordStackParent(branch, parent string) error {
 // entries from local git config in a single subprocess call, caching them for fast
 // lookup by StackParent and StackMergeBase.
 func (g *Client) loadStackCaches() {
-	g.stackParentCache = make(map[string]string)
-	g.stackMergeBaseCache = make(map[string]string)
+	parentCache := make(map[string]string)
+	mergeBaseCache := make(map[string]string)
 	out, err := g.run("config", "--local", "--list")
 	if err != nil {
 		return
@@ -181,27 +181,34 @@ func (g *Client) loadStackCaches() {
 			continue
 		}
 
-		// 1. git config key format: section.subsection.variable
-		// 2. Section and variable are case-insensitive (lowercased in output).
-		// 3. Subsection is the branch name and is case-sensitive — preserve its case.
-		section, rest, ok := strings.Cut(key, ".")
-		if !ok || !strings.EqualFold(section, "branch") {
+		branch, variable, ok := parseBranchConfigKey(key)
+		if !ok {
 			continue
 		}
-
-		lastDot := strings.LastIndexByte(rest, '.')
-		if lastDot < 0 {
-			continue
-		}
-
-		branch := rest[:lastDot]
-		switch variable := rest[lastDot+1:]; {
+		switch {
 		case strings.EqualFold(variable, "stackparent"):
-			g.stackParentCache[branch] = value
+			parentCache[branch] = value
 		case strings.EqualFold(variable, "stackparentmergebase"):
-			g.stackMergeBaseCache[branch] = value
+			mergeBaseCache[branch] = value
 		}
 	}
+	g.stackParentCache = parentCache
+	g.stackMergeBaseCache = mergeBaseCache
+}
+
+// parseBranchConfigKey extracts branch name and variable from a key with shape
+// branch.<name>.<variable>. Branch names may contain dots and preserve case.
+func parseBranchConfigKey(key string) (string, string, bool) {
+	section, rest, ok := strings.Cut(key, ".")
+	if !ok || !strings.EqualFold(section, "branch") {
+		return "", "", false
+	}
+
+	lastDot := strings.LastIndexByte(rest, '.')
+	if lastDot <= 0 || lastDot == len(rest)-1 {
+		return "", "", false
+	}
+	return rest[:lastDot], rest[lastDot+1:], true
 }
 
 // ComputeMergeBase returns git's merge-base for two refs.
