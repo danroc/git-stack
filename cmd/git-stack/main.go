@@ -7,12 +7,12 @@ import (
 	"io"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"github.com/danroc/git-stack/pkg/discovery"
 	"github.com/danroc/git-stack/pkg/git"
 	"github.com/danroc/git-stack/pkg/stack"
 	"github.com/danroc/git-stack/pkg/ui"
-
-	"github.com/spf13/cobra"
 )
 
 var baseBranch string

@@ -47,7 +47,7 @@ formatters:
     - golines
   settings:
     gofumpt:
-      module-path: &module-name git-stack
+      module-path: &module-name github.com/danroc/git-stack
       extra-rules: true
     goimports:
       local-prefixes:
