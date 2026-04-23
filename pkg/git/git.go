@@ -70,6 +70,20 @@ func isExitCode(err error, code int) bool {
 	return errors.As(err, &exitErr) && exitErr.ExitCode() == code
 }
 
+// splitLines returns the lines of s as a slice, handling both Unix and Windows
+// line endings. An empty input returns nil.
+func splitLines(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var out []string
+	sc := bufio.NewScanner(strings.NewReader(s))
+	for sc.Scan() {
+		out = append(out, sc.Text())
+	}
+	return out
+}
+
 // CurrentBranch returns the short name of HEAD (e.g. "main"), or "HEAD" if detached.
 func (g *Client) CurrentBranch() (string, error) {
 	return g.run("rev-parse", "--abbrev-ref", "HEAD")
@@ -81,10 +95,7 @@ func (g *Client) ListBranches() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if out == "" {
-		return nil, nil
-	}
-	return strings.Split(out, "\n"), nil
+	return splitLines(out), nil
 }
 
 // Checkout switches to the specified branch.
@@ -177,7 +188,7 @@ func (g *Client) loadStackCaches() {
 		return
 	}
 
-	for line := range strings.SplitSeq(out, "\n") {
+	for _, line := range splitLines(out) {
 		key, value, ok := strings.Cut(line, "=")
 		if !ok {
 			continue
@@ -210,7 +221,7 @@ func (g *Client) ResetStackConfig() ([]string, error) {
 
 	affected := make(map[string]struct{})
 
-	for line := range strings.SplitSeq(out, "\n") {
+	for _, line := range splitLines(out) {
 		key, _, ok := strings.Cut(line, "=")
 		if !ok {
 			continue
@@ -361,11 +372,9 @@ func ParseWorktreeList(output string) map[string]string {
 	)
 
 	result := make(map[string]string)
-	scanner := bufio.NewScanner(strings.NewReader(output))
 
 	var currentPath string
-	for scanner.Scan() {
-		line := scanner.Text()
+	for _, line := range splitLines(output) {
 		if line == "" {
 			currentPath = ""
 		} else if path, ok := strings.CutPrefix(line, worktreePrefix); ok {

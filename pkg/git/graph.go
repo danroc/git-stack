@@ -1,7 +1,6 @@
 package git
 
 import (
-	"bufio"
 	"fmt"
 	"maps"
 	"slices"
@@ -39,16 +38,14 @@ func (g *Client) listBranchHeads() (map[string]string, error) {
 	}
 
 	heads := make(map[string]string)
-	scanner := bufio.NewScanner(strings.NewReader(out))
-
-	for scanner.Scan() {
-		name, hash, ok := strings.Cut(scanner.Text(), " ")
+	for _, line := range splitLines(out) {
+		name, hash, ok := strings.Cut(line, " ")
 		if ok {
 			heads[name] = hash
 		}
 	}
 
-	return heads, scanner.Err()
+	return heads, nil
 }
 
 // buildGraph constructs an in-memory commit DAG from the given branch heads. It
@@ -115,14 +112,13 @@ func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 // parent hashes. Each line is "hash parent1 [parent2 ...]".
 func parseParentLines(out string) (map[string][]string, error) {
 	parents := make(map[string][]string)
-	scanner := bufio.NewScanner(strings.NewReader(out))
-	for scanner.Scan() {
-		fields := strings.Fields(scanner.Text())
+	for _, line := range splitLines(out) {
+		fields := strings.Fields(line)
 		if len(fields) > 0 {
 			parents[fields[0]] = fields[1:]
 		}
 	}
-	return parents, scanner.Err()
+	return parents, nil
 }
 
 // NewGraph constructs a Graph from raw commit data. When two branches share a HEAD,
