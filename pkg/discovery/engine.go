@@ -115,9 +115,10 @@ func (e *Engine) DiscoverStack(
 // bottom-to-top (base → ... → target).
 //
 // Parent resolution is config-first and side-effect-free:
-// 1. use branch.<name>.stackParent when present
-// 2. otherwise infer a parent from the graph
-// 3. otherwise fall back to the base branch
+//
+//  1. use branch.<name>.stackParent when present
+//  2. otherwise infer a parent from the graph
+//  3. otherwise fall back to the base branch
 func (e *Engine) traceChainTo(target string) ([]Branch, error) {
 	if target == e.base {
 		head, err := e.mustHeadOf(e.base)
@@ -353,11 +354,14 @@ func (e *Engine) mustHeadOf(branch string) (string, error) {
 
 // resolveParent returns the immediate stack parent of branch using a three-tier
 // fallback:
-// 1. Stored config (branch.<name>.stackParent), which remains authoritative while
-//    the configured parent branch still exists, even if the graph has drifted.
-// 2. graph-based inference via inferParent when no config is present or the
-//    configured parent no longer exists.
-// 3. e.base as the ultimate fallback.
+//
+//  1. Stored config (branch.<name>.stackParent), which remains authoritative while the
+//     configured parent branch still exists, even if the graph has drifted.
+//
+//  2. graph-based inference via inferParent when no config is present or the configured
+//     parent no longer exists.
+//
+//  3. e.base as the ultimate fallback.
 func (e *Engine) resolveParent(branch string) (string, error) {
 	if _, err := e.mustHeadOf(branch); err != nil {
 		return "", err
