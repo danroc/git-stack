@@ -277,7 +277,7 @@ func (e *Engine) SetParent(branch, parent string) error {
 	if err != nil {
 		return nil
 	}
-	return e.git.SetStackParentMergeBase(branch, base)
+	return e.git.SetStackMergeBase(branch, base)
 }
 
 // findTreeNode searches the tree rooted at root for a node with the given name,

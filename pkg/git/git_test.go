@@ -121,9 +121,9 @@ func TestParseBranchConfigKey(t *testing.T) {
 		},
 		{
 			name:       "branch name with dots",
-			key:        "branch.feature.foo.stackParentMergeBase",
+			key:        "branch.feature.foo.stackMergeBase",
 			wantBranch: "feature.foo",
-			wantVar:    "stackParentMergeBase",
+			wantVar:    "stackMergeBase",
 			wantOK:     true,
 		},
 		{
@@ -221,10 +221,10 @@ func TestResetStackConfig_RemovesAllEntries(t *testing.T) {
 		t.Error("feat-2 stackParent should be unset")
 	}
 	if _, ok := c2.StackMergeBase("feat-1"); ok {
-		t.Error("feat-1 stackParentMergeBase should be unset")
+		t.Error("feat-1 stackMergeBase should be unset")
 	}
 	if _, ok := c2.StackMergeBase("feat-2"); ok {
-		t.Error("feat-2 stackParentMergeBase should be unset")
+		t.Error("feat-2 stackMergeBase should be unset")
 	}
 }
 

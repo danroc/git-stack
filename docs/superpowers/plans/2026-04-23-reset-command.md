@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a `reset` command that removes all `branch.*.stackParent` and `branch.*.stackParentMergeBase` entries from local git config.
+**Goal:** Add a `reset` command that removes all `branch.*.stackParent` and `branch.*.stackMergeBase` entries from local git config.
 
 **Architecture:** Add `ResetStackConfig()` to `git.Client` that parses local config, finds stack-related keys, unsets them, and returns affected branch names. Wire a `cmdReset()` Cobra command that calls this method and prints per-branch output.
 
@@ -68,10 +68,10 @@ func TestResetStackConfig_RemovesAllEntries(t *testing.T) {
 		t.Error("feat-2 stackParent should be unset")
 	}
 	if _, ok := c2.StackMergeBase("feat-1"); ok {
-		t.Error("feat-1 stackParentMergeBase should be unset")
+		t.Error("feat-1 stackMergeBase should be unset")
 	}
 	if _, ok := c2.StackMergeBase("feat-2"); ok {
-		t.Error("feat-2 stackParentMergeBase should be unset")
+		t.Error("feat-2 stackMergeBase should be unset")
 	}
 }
 ```
@@ -100,7 +100,7 @@ git commit -m "test: add failing test for ResetStackConfig"
 Add this method to `pkg/git/git.go`:
 
 ```go
-// ResetStackConfig removes all stackParent and stackParentMergeBase config entries
+// ResetStackConfig removes all stackParent and stackMergeBase config entries
 // from the local git config. Returns the sorted list of branches that had entries
 // removed, or an empty slice if none were found.
 func (g *Client) ResetStackConfig() ([]string, error) {
@@ -123,7 +123,7 @@ func (g *Client) ResetStackConfig() ([]string, error) {
 		switch {
 		case strings.EqualFold(variable, "stackParent"):
 			affected[branch] = struct{}{}
-		case strings.EqualFold(variable, "stackParentMergeBase"):
+		case strings.EqualFold(variable, "stackMergeBase"):
 			affected[branch] = struct{}{}
 		}
 	}
@@ -135,7 +135,7 @@ func (g *Client) ResetStackConfig() ([]string, error) {
 	for branch := range affected {
 		// Unset both keys; exit code 1 means the key was already absent, which is fine.
 		_, _ = g.run("config", "--local", "--unset", "branch."+branch+".stackParent")
-		_, _ = g.run("config", "--local", "--unset", "branch."+branch+".stackParentMergeBase")
+		_, _ = g.run("config", "--local", "--unset", "branch."+branch+".stackMergeBase")
 	}
 
 	result := make([]string, 0, len(affected))
@@ -259,7 +259,7 @@ Run in a test repo:
 ```bash
 # Set up config
 git config branch.feat-1.stackParent main
-git config branch.feat-1.stackParentMergeBase $(git rev-parse main)
+git config branch.feat-1.stackMergeBase $(git rev-parse main)
 # Run reset
 ./dist/git-stack reset
 # Verify output contains "Removing stack config for feat-1"

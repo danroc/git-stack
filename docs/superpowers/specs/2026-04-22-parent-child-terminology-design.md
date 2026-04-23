@@ -67,7 +67,7 @@ Add a Terminology section to the spec that explicitly defines:
 ## What Does Not Change
 
 - **CLI messages** — Already use parent/child implicitly ("onto", "from...to") and are clear in context
-- **Config key names** — `stackParent` and `stackParentMergeBase` persist on disk; no migration
+- **Config key names** — `stackParent` and `stackMergeBase` persist on disk; no migration
 - **`Parent()`, `SetParent()`, `directChildren()`** — Already use the correct metaphor
 - **`branchAction func(branch, parent string)`** — Already uses parent/child
 - **`Step.Parent`** — Already uses parent/child
