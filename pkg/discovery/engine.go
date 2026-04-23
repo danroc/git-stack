@@ -396,14 +396,16 @@ func (e *Engine) inferParent(branch string) (string, bool) {
 		if candidate == branch {
 			continue
 		}
-		cfgParent, ok := e.git.StackParent(candidate)
+
 		// Config is authoritative, so a branch explicitly configured as a child of
 		// branch cannot also be inferred as branch's parent. We intentionally do not
 		// add drift checks here: drift is surfaced separately, but it does not weaken
 		// configured parent/child relationships while the configured parent exists.
+		cfgParent, ok := e.git.StackParent(candidate)
 		if ok && cfgParent == branch {
 			continue
 		}
+
 		candidateHead, ok := e.graph.HeadOf(candidate)
 		if !ok || candidateHead == branchHead {
 			continue
