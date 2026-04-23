@@ -232,12 +232,22 @@ func (g *Client) ResetStackConfig() ([]string, error) {
 	}
 
 	for branch := range affected {
-		if _, err := g.run("config", "--local", "--unset", "branch."+branch+".stackParent"); err != nil {
+		if _, err := g.run(
+			"config",
+			"--local",
+			"--unset",
+			"branch."+branch+".stackParent",
+		); err != nil {
 			if !isExitCode(err, 1) && !isExitCode(err, 5) {
 				return nil, err
 			}
 		}
-		if _, err := g.run("config", "--local", "--unset", "branch."+branch+".stackParentMergeBase"); err != nil {
+		if _, err := g.run(
+			"config",
+			"--local",
+			"--unset",
+			"branch."+branch+".stackParentMergeBase",
+		); err != nil {
 			if !isExitCode(err, 1) && !isExitCode(err, 5) {
 				return nil, err
 			}

@@ -250,7 +250,7 @@ func cmdReset() *cobra.Command {
 				return err
 			}
 			for _, branch := range branches {
-				fmt.Fprintf(os.Stdout, "Removing stack config for %s\n", branch)
+				_, _ = fmt.Fprintf(os.Stdout, "Removing stack config for %s\n", branch)
 			}
 			return nil
 		},
