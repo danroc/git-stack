@@ -353,9 +353,11 @@ func (e *Engine) mustHeadOf(branch string) (string, error) {
 
 // resolveParent returns the immediate stack parent of branch using a three-tier
 // fallback:
-// 1. stored config (branch.<name>.stackParent)
-// 2. graph-based inference via inferParent
-// 3. e.base as the ultimate fallback
+// 1. Stored config (branch.<name>.stackParent), which remains authoritative while
+//    the configured parent branch still exists, even if the graph has drifted.
+// 2. graph-based inference via inferParent when no config is present or the
+//    configured parent no longer exists.
+// 3. e.base as the ultimate fallback.
 func (e *Engine) resolveParent(branch string) (string, error) {
 	if _, err := e.mustHeadOf(branch); err != nil {
 		return "", err
@@ -391,6 +393,10 @@ func (e *Engine) inferParent(branch string) (string, bool) {
 			continue
 		}
 		cfgParent, ok := e.git.StackParent(candidate)
+		// Config is authoritative, so a branch explicitly configured as a child of
+		// branch cannot also be inferred as branch's parent. We intentionally do not
+		// add drift checks here: drift is surfaced separately, but it does not weaken
+		// configured parent/child relationships while the configured parent exists.
 		if ok && cfgParent == branch {
 			continue
 		}
