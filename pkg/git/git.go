@@ -170,6 +170,7 @@ func (g *Client) RecordStackParent(branch, parent string) error {
 func (g *Client) loadStackCaches() {
 	parentCache := make(map[string]string)
 	mergeBaseCache := make(map[string]string)
+
 	out, err := g.run("config", "--local", "--list")
 	if err != nil {
 		return
@@ -186,12 +187,13 @@ func (g *Client) loadStackCaches() {
 			continue
 		}
 		switch {
-		case strings.EqualFold(variable, "stackparent"):
+		case strings.EqualFold(variable, "stackParent"):
 			parentCache[branch] = value
-		case strings.EqualFold(variable, "stackparentmergebase"):
+		case strings.EqualFold(variable, "stackParentMergeBase"):
 			mergeBaseCache[branch] = value
 		}
 	}
+
 	g.stackParentCache = parentCache
 	g.stackMergeBaseCache = mergeBaseCache
 }

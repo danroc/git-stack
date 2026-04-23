@@ -161,7 +161,10 @@ func TestParseBranchConfigKey(t *testing.T) {
 			t.Parallel()
 			branch, variable, ok := parseBranchConfigKey(tc.key)
 			if ok != tc.wantOK {
-				t.Fatalf("parseBranchConfigKey(%q) ok=%v, want %v", tc.key, ok, tc.wantOK)
+				t.Fatalf(
+					"parseBranchConfigKey(%q) ok=%v, want %v",
+					tc.key, ok, tc.wantOK,
+				)
 			}
 			if !ok {
 				return
