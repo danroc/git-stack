@@ -232,9 +232,20 @@ func (g *Client) ResetStackConfig() ([]string, error) {
 	}
 
 	for branch := range affected {
-		_, _ = g.run("config", "--local", "--unset", "branch."+branch+".stackParent")
-		_, _ = g.run("config", "--local", "--unset", "branch."+branch+".stackParentMergeBase")
+		if _, err := g.run("config", "--local", "--unset", "branch."+branch+".stackParent"); err != nil {
+			if !isExitCode(err, 1) {
+				return nil, err
+			}
+		}
+		if _, err := g.run("config", "--local", "--unset", "branch."+branch+".stackParentMergeBase"); err != nil {
+			if !isExitCode(err, 1) {
+				return nil, err
+			}
+		}
 	}
+
+	g.stackParentCache = nil
+	g.stackMergeBaseCache = nil
 
 	result := make([]string, 0, len(affected))
 	for branch := range affected {
