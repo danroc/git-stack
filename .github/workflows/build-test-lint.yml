@@ -37,6 +37,11 @@ jobs:
       - name: Build
         run: make build
 
+      - name: Configure git identity
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+
       - name: Run tests
         run: make test
 
