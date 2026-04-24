@@ -73,6 +73,7 @@ jobs:
             homepage "https://github.com/${GITHUB_REPOSITORY}"
             url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/git-stack-${VERSION}.tar.gz"
             sha256 "${SHA256}"
+            license "MIT"
             depends_on "go" => :build
 
             livecheck do
