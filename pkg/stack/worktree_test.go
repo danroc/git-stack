@@ -1,6 +1,8 @@
 package stack
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/danroc/git-stack/pkg/git"
@@ -276,5 +278,165 @@ func TestWorktreeGitOps_CheckoutSameWorktree(t *testing.T) {
 	}
 	if len(primary.calls) != 1 || primary.calls[0] != "Checkout:main" {
 		t.Errorf("expected Checkout:main on primary, got %v", primary.calls)
+	}
+}
+
+func TestWorktreeGitOps_ErrorWrapping(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		action func(*worktreeGitOps) error
+		fail   error
+	}{
+		{
+			name: "pull",
+			action: func(w *worktreeGitOps) error {
+				return w.Pull()
+			},
+			fail: errors.New("remote pull failed"),
+		},
+		{
+			name: "rebase",
+			action: func(w *worktreeGitOps) error {
+				return w.Rebase("main")
+			},
+			fail: errors.New("rebase conflict"),
+		},
+		{
+			name: "rebase-onto",
+			action: func(w *worktreeGitOps) error {
+				return w.RebaseOnto("main", "feat-0", "feat-1")
+			},
+			fail: errors.New("rebase conflict"),
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			primary := &fakeRepository{currentBranch: "main"}
+			remote := &failingRepo{
+				fakeRepository: fakeRepository{currentBranch: "main"},
+				failPull:       tt.fail,
+				failRebaseOn:   map[string]error{"main": tt.fail},
+				failRebaseOnto: tt.fail,
+			}
+
+			w := newWorktreeGitOps(primary, map[string]string{
+				"main":   "/repo",
+				"feat-1": "/repo-feat",
+			}, "/repo", func(dir string) Repository {
+				if dir != "/repo-feat" {
+					t.Fatalf("unexpected dir %q", dir)
+				}
+				return remote
+			})
+
+			if err := w.Checkout("feat-1"); err != nil {
+				t.Fatal(err)
+			}
+
+			err := tt.action(w)
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), "/repo-feat") {
+				t.Errorf("error should contain worktree path, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestWorktreeGitOps_EmptyWorktrees(t *testing.T) {
+	primary := &fakeRepository{currentBranch: "main"}
+
+	w := newWorktreeGitOps(
+		primary,
+		map[string]string{},
+		"/repo",
+		func(_ string) Repository {
+			t.Fatal("should not create remote git")
+			return nil
+		},
+	)
+
+	if err := w.Checkout("feat-1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(primary.calls) != 1 || primary.calls[0] != "Checkout:feat-1" {
+		t.Errorf("expected Checkout:feat-1 on primary, got %v", primary.calls)
+	}
+}
+
+func TestWorktreeGitOps_NilWorktrees(t *testing.T) {
+	primary := &fakeRepository{currentBranch: "main"}
+
+	w := newWorktreeGitOps(primary, nil, "/repo", func(_ string) Repository {
+		t.Fatal("should not create remote git")
+		return nil
+	})
+
+	if err := w.Checkout("feat-1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(primary.calls) != 1 || primary.calls[0] != "Checkout:feat-1" {
+		t.Errorf("expected Checkout:feat-1 on primary, got %v", primary.calls)
+	}
+}
+
+func TestWorktreeGitOps_PrimaryErrorNoWrapping(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		action func(Repository) error
+		fail   error
+	}{
+		{
+			name: "pull",
+			action: func(r Repository) error {
+				return r.Pull()
+			},
+			fail: errors.New("primary pull failed"),
+		},
+		{
+			name: "rebase",
+			action: func(r Repository) error {
+				return r.Rebase("main")
+			},
+			fail: errors.New("rebase failed"),
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			primary := &failingRepo{
+				fakeRepository: fakeRepository{currentBranch: "main"},
+				failPull:       tt.fail,
+				failRebaseOn:   map[string]error{"main": tt.fail},
+			}
+
+			w := newWorktreeGitOps(primary, map[string]string{
+				"main": "/repo",
+			}, "/repo", func(_ string) Repository {
+				t.Fatal("should not create remote git")
+				return nil
+			})
+
+			err := tt.action(w)
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			// Error should be the original, not wrapped with worktree path.
+			if err.Error() != tt.fail.Error() {
+				t.Errorf("error should not be wrapped, got: %v", err)
+			}
+		})
 	}
 }

@@ -348,25 +348,6 @@ func TestGraph_BranchAt_MultipleBranches(t *testing.T) {
 	}
 }
 
-// initGraphRepo initializes a temp repo identical to initRepo but scoped to
-// graph tests. Duplicated to keep git package test helpers non-exported.
-func initGraphRepo(t *testing.T) (*Client, string) {
-	t.Helper()
-	dir := t.TempDir()
-	run := func(args ...string) {
-		full := append([]string{"-C", dir}, args...)
-		cmd := exec.Command("git", full...) //nolint:gosec
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
-	run("init", "-q", "-b", "main")
-	run("config", "user.email", "test@example.com")
-	run("config", "user.name", "Test")
-	run("commit", "--allow-empty", "-m", "c0")
-	return NewClient(dir), dir
-}
-
 func rev(t *testing.T, dir, ref string) string {
 	t.Helper()
 	cmd := exec.Command("git", "-C", dir, "rev-parse", ref) //nolint:gosec
@@ -377,10 +358,281 @@ func rev(t *testing.T, dir, ref string) string {
 	return strings.TrimSpace(string(out))
 }
 
+func TestGraph_AncestorsOf(t *testing.T) {
+	g := linearGraph()
+
+	ancestors := g.AncestorsOf("c2")
+	want := []string{"c2", "c1", "c0"}
+	if !slices.Equal(ancestors, want) {
+		t.Errorf("AncestorsOf(c2) = %v, want %v", ancestors, want)
+	}
+
+	ancestors = g.AncestorsOf("c1")
+	want = []string{"c1", "c0"}
+	if !slices.Equal(ancestors, want) {
+		t.Errorf("AncestorsOf(c1) = %v, want %v", ancestors, want)
+	}
+}
+
+func TestGraph_AncestorsOf_MissingHash(t *testing.T) {
+	g := linearGraph()
+
+	ancestors := g.AncestorsOf("missing")
+	if len(ancestors) != 0 {
+		t.Errorf("AncestorsOf(missing) = %v, want []", ancestors)
+	}
+}
+
+func TestGraph_DistanceToAncestor(t *testing.T) {
+	g := linearGraph()
+
+	tests := []struct {
+		desc     string
+		down     string
+		anc      string
+		wantDist int
+		wantOk   bool
+	}{
+		{"c2 to c0", "c2", "c0", 2, true},
+		{"c2 to c1", "c2", "c1", 1, true},
+		{"c1 to c0", "c1", "c0", 1, true},
+		{"c0 to c0", "c0", "c0", 0, true},
+		{"c0 to c2 (reverse)", "c0", "c2", 0, false},
+		{"missing descendant", "missing", "c0", 0, false},
+		{"missing ancestor", "c2", "missing", 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			dist, ok := g.DistanceToAncestor(tt.down, tt.anc)
+			if ok != tt.wantOk {
+				t.Errorf(
+					"DistanceToAncestor(%s, %s) ok=%v, want %v",
+					tt.down,
+					tt.anc,
+					ok,
+					tt.wantOk,
+				)
+			}
+			if dist != tt.wantDist {
+				t.Errorf(
+					"DistanceToAncestor(%s, %s) = %d, want %d",
+					tt.down,
+					tt.anc,
+					dist,
+					tt.wantDist,
+				)
+			}
+		})
+	}
+}
+
+func TestGraph_DistanceToAncestor_MergeCommit(t *testing.T) {
+	g := NewGraph(
+		map[string][]string{
+			"c0":   {},
+			"c1":   {"c0"},
+			"c2":   {"c1"},
+			"m1":   {"c2", "side"},
+			"side": {"c0"},
+		},
+		map[string]string{
+			"main": "m1",
+		},
+	)
+
+	// Distance from m1 to c0 via second parent (side → c0) is 2 edges.
+	dist, ok := g.DistanceToAncestor("m1", "c0")
+	if !ok {
+		t.Fatal("expected c0 to be reachable from m1")
+	}
+	if dist != 2 {
+		// Could be 2 via side→c0 or 3 via c2→c1→c0, BFS finds shortest.
+		t.Errorf("DistanceToAncestor(m1, c0) = %d, want 2", dist)
+	}
+}
+
+func TestGraph_CommitsBetween_NoCommonAncestor(t *testing.T) {
+	g := NewGraph(
+		map[string][]string{
+			"a1": {"a0"},
+			"a0": {},
+			"b1": {"b0"},
+			"b0": {},
+		},
+		map[string]string{
+			"branch-a": "a1",
+			"branch-b": "b1",
+		},
+	)
+
+	result := g.CommitsBetween("a1", "b1")
+	if result.Ahead != 0 || result.Behind != 0 {
+		t.Errorf("CommitsBetween(a1, b1) = %+v, want {Ahead: 0, Behind: 0}", result)
+	}
+}
+
+func TestNewGraph_Empty(t *testing.T) {
+	g := NewGraph(nil, nil)
+
+	if len(g.Branches()) != 0 {
+		t.Errorf("Branches() = %v, want []", g.Branches())
+	}
+	if g.HasHash("anything") {
+		t.Error("HasHash should return false for empty graph")
+	}
+}
+
+func TestNewGraph_SingleBranch(t *testing.T) {
+	g := NewGraph(
+		map[string][]string{"c0": {}},
+		map[string]string{"main": "c0"},
+	)
+
+	if !g.HasBranch("main") {
+		t.Error("graph should have main branch")
+	}
+	if !g.HasHash("c0") {
+		t.Error("graph should contain c0")
+	}
+}
+
+func TestParseParentLines(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  map[string][]string
+	}{
+		{
+			name:  "empty input",
+			input: "",
+			want:  map[string][]string{},
+		},
+		{
+			name:  "single commit with one parent",
+			input: "abc123 def456",
+			want:  map[string][]string{"abc123": {"def456"}},
+		},
+		{
+			name:  "commit with multiple parents",
+			input: "abc123 def456 789xyz",
+			want:  map[string][]string{"abc123": {"def456", "789xyz"}},
+		},
+		{
+			name:  "multiple commits",
+			input: "abc123 def456\nghi789 jkl012",
+			want: map[string][]string{
+				"abc123": {"def456"},
+				"ghi789": {"jkl012"},
+			},
+		},
+		{
+			name:  "root commit (no parents)",
+			input: "abc123",
+			want:  map[string][]string{"abc123": {}},
+		},
+		{
+			name:  "empty lines ignored",
+			input: "abc123 def456\n\nghi789",
+			want: map[string][]string{
+				"abc123": {"def456"},
+				"ghi789": {},
+			},
+		},
+	}
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := parseParentLines(tc.input)
+			if err != nil {
+				t.Fatalf("parseParentLines(%q) error: %v", tc.input, err)
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("parseParentLines(%q) = %v, want %v", tc.input, got, tc.want)
+			}
+			for k, v := range tc.want {
+				if !slices.Equal(got[k], v) {
+					t.Errorf(
+						"parseParentLines(%q)[%q] = %v, want %v",
+						tc.input,
+						k,
+						got[k],
+						v,
+					)
+				}
+			}
+		})
+	}
+}
+
+func TestGraph_ParentsOf(t *testing.T) {
+	g := NewGraph(
+		map[string][]string{
+			"c0": {},
+			"c1": {"c0"},
+			"m1": {"c1", "c0"},
+		},
+		map[string]string{"main": "m1"},
+	)
+
+	ps := g.ParentsOf("m1")
+	if len(ps) != 2 {
+		t.Fatalf("ParentsOf(m1) = %v, want 2 parents", ps)
+	}
+
+	ps = g.ParentsOf("c0")
+	if len(ps) != 0 {
+		t.Errorf("ParentsOf(c0) = %v, want []", ps)
+	}
+}
+
+func TestGraph_HasBranch(t *testing.T) {
+	g := linearGraph()
+
+	if !g.HasBranch("main") {
+		t.Error("HasBranch(main) should be true")
+	}
+	if g.HasBranch("missing") {
+		t.Error("HasBranch(missing) should be false")
+	}
+}
+
+func TestGraph_FirstParent_Missing(t *testing.T) {
+	g := linearGraph()
+
+	_, ok := g.FirstParent("missing")
+	if ok {
+		t.Error("FirstParent(missing) should return ok=false")
+	}
+}
+
+func TestGraph_BranchesAt_Empty(t *testing.T) {
+	g := linearGraph()
+
+	branches := g.BranchesAt("nonexistent")
+	if len(branches) != 0 {
+		t.Errorf("BranchesAt(nonexistent) = %v, want nil or empty", branches)
+	}
+}
+
+func TestGraph_CommitsBetween_SameHash(t *testing.T) {
+	g := NewGraph(
+		map[string][]string{"c0": {}},
+		map[string]string{"main": "c0"},
+	)
+
+	result := g.CommitsBetween("c0", "c0")
+	if result.Ahead != 0 || result.Behind != 0 {
+		t.Errorf("CommitsBetween(c0, c0) = %+v, want {Ahead: 0, Behind: 0}", result)
+	}
+}
+
 // TestLoadGraph_IncludesBaseDownToFloor verifies the loaded graph contains
 // base-branch commits down to the octopus merge-base (inclusive).
 func TestLoadGraph_IncludesBaseDownToFloor(t *testing.T) {
-	c, dir := initGraphRepo(t)
+	c, dir := initRepo(t)
 	gi := func(args ...string) {
 		full := append([]string{"-C", dir}, args...)
 		cmd := exec.Command("git", full...) //nolint:gosec
