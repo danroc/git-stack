@@ -218,10 +218,11 @@ If any operation (`push`, `pull --rebase`, `rebase`) fails for any reason:
 
 ### 6.1 Project Structure
 
-- `cmd/`: Cobra command definitions and CLI entry point.
-- `pkg/engine/`: Core discovery and lineage-tracing algorithms.
-- `pkg/gitutils/`: Abstraction layer for executing Git commands via `os/exec`.
-- `pkg/ui/`: Stack rendering and interactive prompt logic.
+- `cmd/git-stack/`: Cobra command definitions and CLI entry point.
+- `internal/discovery/`: Stack discovery and lineage over the commit graph.
+- `internal/git/`: Git command execution and graph loading via `os/exec`.
+- `internal/stack/`: Push, pull, rebase, and move across the discovered stack.
+- `internal/ui/`: Stack tree rendering and interactive disambiguation prompts.
 
 ### 6.2 Implementation Details
 
@@ -232,8 +233,9 @@ If any operation (`push`, `pull --rebase`, `rebase`) fails for any reason:
 
 ## 7. Testing Strategy
 
-- **Unit Tests**: Test the `engine` package using mocked Git outputs to verify lineage
-  tracing, direct-child filtering, and ambiguity detection across known topologies.
+- **Unit Tests**: Test the `discovery` package using mocked Git outputs to verify
+  lineage tracing, direct-child filtering, and ambiguity detection across known
+  topologies.
 - **Integration Tests**: Shell scripts that:
   1. Initialize real Git repositories.
   2. Create known topologies (linear, bifurcated, disconnected).

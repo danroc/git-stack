@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/danroc/git-stack/pkg/git"
+	"github.com/danroc/git-stack/internal/git"
 )
 
 // Branch is a branch name paired with its head.

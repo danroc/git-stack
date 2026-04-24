@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/danroc/git-stack/pkg/git"
+	"github.com/danroc/git-stack/internal/git"
 )
 
 // initTestRepo creates a temporary git repository for config operations.

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danroc/git-stack/pkg/discovery"
+	"github.com/danroc/git-stack/internal/discovery"
 )
 
 // fakeDiscoverer lets stack-level tests control discovery without touching git.

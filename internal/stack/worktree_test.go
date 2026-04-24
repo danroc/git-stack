@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danroc/git-stack/pkg/git"
+	"github.com/danroc/git-stack/internal/git"
 )
 
 func TestParseWorktreeList(t *testing.T) {

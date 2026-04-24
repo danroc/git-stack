@@ -9,10 +9,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/danroc/git-stack/pkg/discovery"
-	"github.com/danroc/git-stack/pkg/git"
-	"github.com/danroc/git-stack/pkg/stack"
-	"github.com/danroc/git-stack/pkg/ui"
+	"github.com/danroc/git-stack/internal/discovery"
+	"github.com/danroc/git-stack/internal/git"
+	"github.com/danroc/git-stack/internal/stack"
+	"github.com/danroc/git-stack/internal/ui"
 )
 
 var baseBranch string
