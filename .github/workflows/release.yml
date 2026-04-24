@@ -1,0 +1,111 @@
+name: Release
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GIT_USER_NAME: "github-actions[bot]"
+      GIT_USER_EMAIL: "41898282+github-actions[bot]@users.noreply.github.com"
+      TAP_REPOSITORY: danroc/homebrew-tap
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build release tarball
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist
+          git archive --format=tar.gz \
+            --prefix="git-stack-${VERSION}/" \
+            -o "dist/git-stack-${VERSION}.tar.gz" \
+            "${GITHUB_REF_NAME}"
+
+      - name: Create or update GitHub Release
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          TARBALL="dist/git-stack-${VERSION}.tar.gz"
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" --clobber "${TARBALL}"
+          else
+            gh release create "${GITHUB_REF_NAME}" --generate-notes "${TARBALL}"
+          fi
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          repository: ${{ env.TAP_REPOSITORY }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Generate formula
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          SHA256=$(sha256sum "dist/git-stack-${VERSION}.tar.gz" | awk '{print $1}')
+
+          cat > homebrew-tap/Formula/git-stack.rb <<EOF
+          class GitStack < Formula
+            desc "Manage stacks of interdependent Git branches"
+            homepage "https://github.com/${GITHUB_REPOSITORY}"
+            url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/git-stack-${VERSION}.tar.gz"
+            sha256 "${SHA256}"
+            depends_on "go" => :build
+
+            livecheck do
+              url "https://github.com/${GITHUB_REPOSITORY}/releases/latest"
+              regex(/^v?(\d+\.\d+\.\d+)\$/i)
+            end
+
+            def install
+              ldflags = "-s -w -X main.version=#{version}"
+
+              system "go", "build",
+                "-ldflags", ldflags,
+                "-o", "git-stack",
+                "./cmd/git-stack"
+              bin.install "git-stack"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/git-stack version")
+            end
+          end
+          EOF
+
+      - name: Commit formula to tap
+        working-directory: homebrew-tap
+        run: |
+          git config user.name "${GIT_USER_NAME}"
+          git config user.email "${GIT_USER_EMAIL}"
+
+          if git diff --quiet Formula/git-stack.rb; then
+            echo "No formula changes to commit"
+          else
+            git add Formula/git-stack.rb
+            git commit -m "chore: update git-stack formula for ${GITHUB_REF_NAME}"
+            git push
+          fi
