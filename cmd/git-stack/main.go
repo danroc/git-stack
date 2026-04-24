@@ -17,10 +17,14 @@ import (
 
 var baseBranch string
 
+// version is set via -ldflags "-X main.version=..." at build time.
+var version = "dev"
+
 func main() {
 	root := &cobra.Command{
 		Use:          "git-stack",
 		Short:        "Manage stacks of interdependent Git branches",
+		Version:      version,
 		SilenceUsage: true,
 	}
 	root.PersistentFlags().
@@ -34,6 +38,7 @@ func main() {
 		cmdPull(),
 		cmdRebase(),
 		cmdReset(),
+		cmdVersion(),
 	)
 
 	if err := root.Execute(); err != nil {
@@ -272,6 +277,17 @@ func cmdMove() *cobra.Command {
 					return s.Move(branch, newParent, stepPrinter(os.Stdout, "Rebasing"))
 				})
 			})(cmd, args)
+		},
+	}
+}
+
+func cmdVersion() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print the version",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			_, err := fmt.Fprintln(cmd.OutOrStdout(), version)
+			return err
 		},
 	}
 }
