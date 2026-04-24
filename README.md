@@ -1,106 +1,117 @@
 # git-stack
 
-Manage stacks of interdependent Git branches from the command line — platform-agnostic, no external services, no metadata files.
+A CLI for managing stacks of interdependent Git branches.
 
-A **stack** is a linear chain of branches where each one is built on top of the previous: `main → feat-1 → feat-2 → feat-3`. `git-stack` automates the tedious parts — keeping every branch rebased on its parent, pushing and pulling the whole chain, and moving branches around within it.
+When a feature is split into a sequence of PRs (`main` → `feat-1` → `feat-2` →
+`feat-3`), every change to an earlier branch forces a manual rebase of everything above
+it. `git-stack` automates that cascade, along with pushing, pulling, and reparenting
+operations across the whole stack.
 
-## Why
-
-If you split large changes into reviewable PRs, you end up manually rebasing a cascade of branches every time you update any of them. `git-stack` does that for you. Unlike `gh stack`, `spr`, or `graphite`, it talks to Git only — so it works the same with GitHub, GitLab, Bitbucket, Gitea, or a bare remote.
-
-Branch relationships are persisted in standard `git config` (`branch.<name>.stackParent`). There are no hidden state files and no server-side components.
+It operates entirely on top of local Git primitives. There are no external APIs, no
+hidden state files, and no server-side components. Parent/child relationships are
+persisted in local Git config under `branch.<name>.stackParent`.
 
 ## Install
 
-### Homebrew
-
 ```sh
-brew tap danroc/tap
-brew install git-stack
+brew install danroc/tap/git-stack
 ```
 
-### Go
+With Go:
 
 ```sh
 go install github.com/danroc/git-stack/cmd/git-stack@latest
 ```
 
-### From source
+From source:
 
 ```sh
 git clone https://github.com/danroc/git-stack
 cd git-stack
-make install   # builds and copies to ~/.local/bin
+make install   # Builds and installs to ~/.local/bin
 ```
 
-## Quickstart
+## Example
+
+Build a stack on top of `main`:
 
 ```sh
-# On main, start a stack
-git-stack add feat-1        # create feat-1 off main
-# …commit…
-git-stack add feat-2        # create feat-2 off feat-1
-# …commit…
-git-stack add feat-3        # create feat-3 off feat-2
-# …commit…
+git-stack add feat-1     # Branch off main
+# Commits...
+git-stack add feat-2     # Branch off feat-1
+# Commits...
+git-stack add feat-3     # Branch off feat-2
+# Commits...
 
-git-stack view              # see the whole stack
-git-stack push              # push every branch, setting upstreams as needed
+git-stack view
+git-stack push           # Pushes all three, setting upstreams on first push
 ```
 
-Later, after `main` has moved on:
+After `main` advances, pull it, check out the top of the stack, and rebase bottom-up:
 
 ```sh
 git checkout main && git pull
 git checkout feat-3
-git-stack rebase            # rebase feat-1, feat-2, feat-3 onto the new main, in order
-git-stack push              # force-push the updated stack (configure push.default as needed)
+git-stack rebase
+git-stack push           # Force-push the updated stack (configure push.default or --force-with-lease to taste)
 ```
 
-Reparenting a branch mid-stack:
+Reparent a branch in the middle of the stack:
 
 ```sh
-git-stack move feat-2 main  # detach feat-2 (and its children) and rebase onto main
+git-stack move feat-2 main
 ```
+
+This rebases `feat-2` from `feat-1` onto `main`, then cascades the rebase through
+`feat-3` so the chain stays linear.
 
 ## Commands
 
-| Command | Does |
-|---|---|
-| `git-stack add <name>` | Create a new branch off `HEAD`, extending the stack. |
-| `git-stack view` | Print the full stack tree with ahead/behind counts. |
-| `git-stack rebase` | Rebase every branch in the stack onto its parent, bottom-to-top. |
-| `git-stack push` | Push every branch in the stack; auto-sets upstream on first push. |
-| `git-stack pull` | Pull each branch with `--rebase`, bottom-to-top. |
-| `git-stack move [branch] <new-parent>` | Reparent a branch (and its descendants) onto a new parent. |
-| `git-stack reset` | Remove all `stackParent` config entries. |
-| `git-stack version` | Print the installed version. |
+| Command                      | Description                                                          |
+| ---------------------------- | -------------------------------------------------------------------- |
+| `add <name>`                 | Create a new branch off `HEAD`.                                      |
+| `view`                       | Print the stack with ahead counts per branch.                        |
+| `rebase`                     | Rebase every branch in the stack onto its parent, bottom to top.     |
+| `push`                       | Push every branch. Sets upstream to `origin/<branch>` on first push. |
+| `pull`                       | Pull every branch with `--rebase`, bottom to top.                    |
+| `move [branch] <new-parent>` | Reparent a branch and cascade the rebase through its descendants.    |
+| `reset`                      | Remove all `stackParent` entries from local Git config.              |
+| `version`                    | Print the version.                                                   |
 
-All commands accept `--base <branch>` to override base-branch auto-detection (default: `main`, then `master`).
+All commands accept `--base <branch>` to override base-branch detection. The default
+base is `main`, falling back to `master`.
 
-On any conflict, `git-stack` stops immediately and leaves you in the in-progress rebase on the failing branch. Resolve with `git rebase --continue` / `--abort` and re-run.
+## Conflicts
 
-## How it works
+If any `git pull --rebase` or `git rebase` step fails, `git-stack` stops immediately,
+leaves you on the failing branch with the rebase in progress, and exits non-zero.
+Resolve it with the usual `git rebase --continue` or `git rebase --abort`, then re-run
+the `git-stack` command.
 
-The active stack is discovered from the Git commit graph and `refs/heads/*`:
+## Stack discovery
 
-- **Upward** from `HEAD`, walking first-parent history until it reaches the base branch.
-- **Downward**, scanning all local branches whose HEAD is strictly above the current branch.
+The stack is derived from the Git commit graph at invocation time. `git-stack` walks
+first-parent history upward from `HEAD` until it reaches the base branch, and scans
+`refs/heads/*` downward for local branches whose HEAD sits strictly above the current
+one.
 
-When the graph is ambiguous (e.g. two branches share a HEAD, or a parent has advanced past a child), `branch.<name>.stackParent` is consulted; when it isn't, the graph wins and the config is repaired. If multiple direct children exist, you're prompted to pick one.
+When the graph is ambiguous (two branches share a HEAD, or a parent has advanced past a
+child) the `stackParent` config from previous runs is consulted. When the graph gives an
+unambiguous answer, the graph wins and stale config is repaired. If multiple direct
+children exist at any step, `git-stack` prompts for a selection.
 
-Full design in [`SPEC.md`](SPEC.md).
+Full design details are in [`SPEC.md`](SPEC.md).
 
 ## Development
 
 ```sh
-make build       # binary to ./dist/git-stack
-make test        # go test ./...
-make lint        # golangci-lint + go mod tidy
-make help        # show all targets
+make build   # Binary at ./dist/git-stack
+make test
+make lint
+make help    # List all targets
 ```
 
-Requires Go 1.26 and `golangci-lint` for linting.
+Requires Go 1.26 and `golangci-lint`.
 
 ## License
 
