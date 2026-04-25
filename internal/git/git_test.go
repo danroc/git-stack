@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -476,17 +477,18 @@ func TestClient_Push(t *testing.T) {
 	runGit(t, dir, "checkout", "-q", "-b", "feat-1")
 	runGit(t, dir, "commit", "--allow-empty", "-m", "c1")
 
-	// No upstream configured — should push to origin/feat-1 and set upstream.
-	if err := c.Push("feat-1"); err != nil {
-		// It will fail because there's no remote, but we can check the
-		// error is the expected git error type with the right args.
-		var gitErr *Error
-		if !errors.As(err, &gitErr) {
-			t.Fatalf("expected *git.Error, got %T", err)
-		}
-		if len(gitErr.Args) < 2 || gitErr.Args[0] != "push" {
-			t.Errorf("expected push args, got %v", gitErr.Args)
-		}
+	// No upstream configured — should push to origin/feat-1 with --force-with-lease.
+	err := c.Push("feat-1")
+	if err == nil {
+		t.Fatal("expected push to fail (no origin remote configured)")
+	}
+	var gitErr *Error
+	if !errors.As(err, &gitErr) {
+		t.Fatalf("expected *git.Error, got %T", err)
+	}
+	wantArgs := []string{"push", "--force-with-lease", "-u", "origin", "feat-1"}
+	if !slices.Equal(gitErr.Args, wantArgs) {
+		t.Errorf("args = %v, want %v", gitErr.Args, wantArgs)
 	}
 }
 
@@ -599,12 +601,16 @@ func TestClient_Push_WithUpstream(t *testing.T) {
 	runGit(t, dir, "config", "--local", "branch.feat-1.merge", "refs/heads/feat-1")
 
 	err := c.Push("feat-1")
+	if err == nil {
+		t.Fatal("expected push to fail (no origin remote configured)")
+	}
 	var gitErr *Error
-	if errors.As(err, &gitErr) {
-		// Should push to origin feat-1:feat-1
-		if len(gitErr.Args) < 3 || gitErr.Args[0] != "push" {
-			t.Errorf("expected push args, got %v", gitErr.Args)
-		}
+	if !errors.As(err, &gitErr) {
+		t.Fatalf("expected *git.Error, got %T", err)
+	}
+	wantArgs := []string{"push", "--force-with-lease", "origin", "feat-1:feat-1"}
+	if !slices.Equal(gitErr.Args, wantArgs) {
+		t.Errorf("args = %v, want %v", gitErr.Args, wantArgs)
 	}
 }
 

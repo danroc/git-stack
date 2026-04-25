@@ -320,18 +320,18 @@ func (g *Client) getUpstream(branch string) (string, string, error) {
 	return remote, strings.TrimPrefix(merge, "refs/heads/"), nil
 }
 
-// Push pushes branch to its configured upstream. If no upstream is configured, pushes
-// to origin/<branch> and sets it as the upstream.
+// Push pushes branch to its configured upstream using --force-with-lease. If no
+// upstream is configured, pushes to origin/<branch> and sets it as the upstream.
 func (g *Client) Push(branch string) error {
 	remote, remoteBranch, err := g.getUpstream(branch)
 	if err != nil {
 		return err
 	}
 	if remote == "" {
-		_, err = g.run("push", "-u", "origin", branch)
+		_, err = g.run("push", "--force-with-lease", "-u", "origin", branch)
 		return err
 	}
-	_, err = g.run("push", remote, branch+":"+remoteBranch)
+	_, err = g.run("push", "--force-with-lease", remote, branch+":"+remoteBranch)
 	return err
 }
 

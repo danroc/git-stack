@@ -65,9 +65,11 @@ branch. No validation of stack membership is performed.
 **`git-stack push`**
 
 Iterates through all feature branches in the identified stack — excluding the base
-branch — from bottom to top and executes `git push` for each. If no upstream is
-configured for a branch, sets it to `origin/<branch-name>`. Halts immediately and
-reports the failing branch if any push operation fails.
+branch — from bottom to top and executes `git push --force-with-lease` for each.
+The `--force-with-lease` flag allows pushing after a rebase has rewritten history,
+while still rejecting the push if the remote has advanced (someone else pushed).
+If no upstream is configured for a branch, sets it to `origin/<branch-name>`.
+Halts immediately and reports the failing branch if any push operation fails.
 
 ---
 
