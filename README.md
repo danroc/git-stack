@@ -118,3 +118,7 @@ Requires Go 1.26 and `golangci-lint`.
 ## License
 
 [MIT](LICENSE)
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release history and notable changes.
