@@ -38,13 +38,15 @@ Build a stack on top of `main`:
 ```sh
 git-stack add feat-1  # Branch off main
 # Commits...
+
 git-stack add feat-2  # Branch off feat-1
 # Commits...
+
 git-stack add feat-3  # Branch off feat-2
 # Commits...
 
 git-stack view
-git-stack push        # Pushes all three, setting upstreams on first push
+git-stack push  # Pushes all three, setting upstreams on first push
 ```
 
 After `main` advances, pull it, check out the top of the stack, and rebase bottom-up:
@@ -108,7 +110,7 @@ Full design details are in [`SPEC.md`](SPEC.md).
 make build  # Binary at ./dist/git-stack
 make test
 make lint
-make help   # List all targets
+make help  # List all targets
 ```
 
 Requires Go 1.26 and `golangci-lint`.
