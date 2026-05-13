@@ -199,9 +199,9 @@ func (s *Stack) checkoutAndRebaseOnto(branch, oldParent, newParent string) error
 	})
 }
 
-// Pull checks out and pulls (--rebase) every non-base branch in order. On failure it
-// halts and leaves the repo on the failing branch so the user can resolve conflicts and
-// re-run. On full success it restores the original branch.
+// Pull checks out and pulls (--ff-only) every non-base branch in order. On failure it
+// halts and leaves the repo on the failing branch so the user can resolve the Git issue
+// and re-run. On full success it restores the original branch.
 func (s *Stack) Pull(fn NotifyFn) error {
 	notify := orNoop(fn)
 	return s.forEachBranch(true, func(branch, _ string) error {

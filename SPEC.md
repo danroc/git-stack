@@ -77,9 +77,8 @@ Halts immediately and reports the failing branch if any push operation fails.
 
 Iterates through all feature branches in the identified stack — excluding the base
 branch — from bottom to top. For each branch: checks it out, then executes
-`git pull --rebase`. If a conflict or error occurs, halts immediately and leaves the
-user on the failing branch with the rebase in-progress, so they can resolve it with
-`git rebase --continue` or `git rebase --abort` before re-running.
+`git pull --ff-only`. If an error occurs, halts immediately and leaves the user on the
+failing branch so they can resolve the underlying Git issue before re-running.
 
 ---
 
@@ -208,12 +207,12 @@ the graph wins and config is repaired.
 
 ### 5.3 Conflict and Error Management
 
-If any operation (`push`, `pull --rebase`, `rebase`) fails for any reason:
+If any operation (`push`, `pull --ff-only`, `rebase`) fails for any reason:
 
 - Halt execution immediately; do not process remaining branches.
 - Print the name of the branch that failed along with the error.
-- For `pull --rebase` conflicts: leave the repository in the in-progress rebase state so
-  the user can resolve conflicts and continue manually.
+- For `pull --ff-only` failures: leave the repository on the failing branch so the user
+  can resolve the Git issue manually.
 - Exit with a non-zero status code.
 
 ## 6. Technical Architecture (Go)

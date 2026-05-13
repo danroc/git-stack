@@ -492,6 +492,23 @@ func TestClient_Push(t *testing.T) {
 	}
 }
 
+func TestClient_Pull(t *testing.T) {
+	c, _ := initRepo(t)
+
+	err := c.Pull()
+	if err == nil {
+		t.Fatal("expected pull to fail (no upstream configured)")
+	}
+	var gitErr *Error
+	if !errors.As(err, &gitErr) {
+		t.Fatalf("expected *git.Error, got %T", err)
+	}
+	wantArgs := []string{"pull", "--ff-only"}
+	if !slices.Equal(gitErr.Args, wantArgs) {
+		t.Errorf("args = %v, want %v", gitErr.Args, wantArgs)
+	}
+}
+
 func TestClient_CommitsAhead(t *testing.T) {
 	c, dir := initRepo(t)
 

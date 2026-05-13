@@ -335,9 +335,9 @@ func (g *Client) Push(branch string) error {
 	return err
 }
 
-// Pull runs `git pull --rebase` on the currently checked-out branch.
+// Pull runs `git pull --ff-only` on the currently checked-out branch.
 func (g *Client) Pull() error {
-	_, err := g.run("pull", "--rebase")
+	_, err := g.run("pull", "--ff-only")
 	return err
 }
 

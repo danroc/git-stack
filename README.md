@@ -75,7 +75,7 @@ This rebases `feat-2` from `feat-1` onto `main`, then cascades the rebase throug
 | `view`                       | Print the stack with ahead counts per branch.                        |
 | `rebase`                     | Rebase every branch in the stack onto its parent, bottom to top.     |
 | `push`                       | Push every branch. Sets upstream to `origin/<branch>` on first push. |
-| `pull`                       | Pull every branch with `--rebase`, bottom to top.                    |
+| `pull`                       | Pull every branch with `--ff-only`, bottom to top.                   |
 | `move [branch] <new-parent>` | Reparent a branch and cascade the rebase through its descendants.    |
 | `reset`                      | Remove all `stackParent` entries from local Git config.              |
 | `version`                    | Print the version.                                                   |
@@ -85,10 +85,9 @@ base is `main`, falling back to `master`.
 
 ## Conflicts
 
-If any `git pull --rebase` or `git rebase` step fails, `git-stack` stops immediately,
-leaves you on the failing branch with the rebase in progress, and exits non-zero.
-Resolve it with the usual `git rebase --continue` or `git rebase --abort`, then re-run
-the `git-stack` command.
+If any `git pull --ff-only` or `git rebase` step fails, `git-stack` stops immediately,
+leaves you on the failing branch, and exits non-zero. Resolve the underlying Git issue,
+then re-run the `git-stack` command.
 
 ## Stack discovery
 
