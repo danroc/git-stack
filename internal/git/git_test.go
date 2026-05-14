@@ -273,50 +273,6 @@ func TestError_Unwrap(t *testing.T) {
 	}
 }
 
-func TestIsOneOf(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name   string
-		value  int
-		values []int
-		want   bool
-	}{
-		{"first match", 1, []int{1, 2, 3}, true},
-		{"middle match", 2, []int{1, 2, 3}, true},
-		{"last match", 3, []int{1, 2, 3}, true},
-		{"no match", 4, []int{1, 2, 3}, false},
-		{"single element match", 5, []int{5}, true},
-		{"single element no match", 5, []int{1}, false},
-	}
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if got := isOneOf(tc.value, tc.values...); got != tc.want {
-				t.Errorf(
-					"isOneOf(%d, %v) = %v, want %v",
-					tc.value,
-					tc.values,
-					got,
-					tc.want,
-				)
-			}
-		})
-	}
-}
-
-func TestIsOneOf_String(t *testing.T) {
-	t.Parallel()
-
-	if !isOneOf("foo", "foo", "bar") {
-		t.Error("isOneOf should work with strings")
-	}
-	if isOneOf("baz", "foo", "bar") {
-		t.Error("isOneOf should return false for non-matching string")
-	}
-}
-
 func TestSplitLines(t *testing.T) {
 	t.Parallel()
 

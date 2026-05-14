@@ -65,16 +65,6 @@ func (g *Client) run(args ...string) (string, error) {
 	return strings.TrimSpace(stdout.String()), nil
 }
 
-// isOneOf reports whether v equals any of the given values.
-func isOneOf[T comparable](v T, values ...T) bool {
-	for _, w := range values {
-		if v == w {
-			return true
-		}
-	}
-	return false
-}
-
 // isExitCode reports whether err wraps an exec.ExitError with the given code.
 func isExitCode(err error, code int) bool {
 	var exitErr *exec.ExitError
@@ -241,7 +231,10 @@ func (g *Client) ResetStackConfig() ([]string, error) {
 		if !ok {
 			continue
 		}
-		if isOneOf(strings.ToLower(variable), "stackparent", "stackmergebase") {
+		if slices.Contains(
+			[]string{"stackparent", "stackmergebase"},
+			strings.ToLower(variable),
+		) {
 			branches[branch] = true
 		}
 	}
