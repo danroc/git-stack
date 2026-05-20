@@ -1,5 +1,5 @@
-// Package git wraps git subprocesses so the rest of the codebase never touches
-// os/exec directly. Every instance is scoped to a directory via cmd.Dir.
+// Package git wraps git subprocesses so the rest of the codebase never touches os/exec
+// directly. Every instance is scoped to a directory via cmd.Dir.
 package git
 
 import (
@@ -71,8 +71,8 @@ func isExitCode(err error, code int) bool {
 	return errors.As(err, &exitErr) && exitErr.ExitCode() == code
 }
 
-// splitLines returns the lines of s as a slice, handling both Unix and Windows
-// line endings. An empty input returns nil.
+// splitLines returns the lines of s as a slice, handling both Unix and Windows line
+// endings. An empty input returns nil.
 func splitLines(s string) []string {
 	if s == "" {
 		return nil
@@ -126,8 +126,8 @@ func (g *Client) SetStackParent(branch, parent string) error {
 	return nil
 }
 
-// SetStackMergeBase records the last known merge-base for branch's configured
-// stack parent in local git config.
+// SetStackMergeBase records the last known merge-base for branch's configured stack
+// parent in local git config.
 func (g *Client) SetStackMergeBase(branch, mergeBase string) error {
 	_, err := g.run(
 		"config",
@@ -177,9 +177,9 @@ func (g *Client) RecordStackParent(branch, parent string) error {
 	return g.SetStackMergeBase(branch, mergeBase)
 }
 
-// loadStackCaches loads all branch.*.stackParent and branch.*.stackMergeBase
-// entries from local git config in a single subprocess call, caching them for fast
-// lookup by StackParent and StackMergeBase.
+// loadStackCaches loads all branch.*.stackParent and branch.*.stackMergeBase entries
+// from local git config in a single subprocess call, caching them for fast lookup by
+// StackParent and StackMergeBase.
 func (g *Client) loadStackCaches() {
 	parentCache := make(map[string]string)
 	mergeBaseCache := make(map[string]string)
@@ -211,9 +211,9 @@ func (g *Client) loadStackCaches() {
 	g.stackMergeBaseCache = mergeBaseCache
 }
 
-// ResetStackConfig removes all stackParent and stackMergeBase config entries
-// from the local git config. Returns the sorted list of branches that had entries
-// removed, or an empty slice if none were found.
+// ResetStackConfig removes all stackParent and stackMergeBase config entries from the
+// local git config. Returns the sorted list of branches that had entries removed, or an
+// empty slice if none were found.
 func (g *Client) ResetStackConfig() ([]string, error) {
 	out, err := g.run("config", "--local", "--list")
 	if err != nil {
