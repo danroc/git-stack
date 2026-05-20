@@ -195,16 +195,16 @@ func (g *Graph) FirstParent(hash string) (string, bool) {
 	return ps[0], true
 }
 
-// Traverse returns an iterator over ancestor commits reachable from start, including
-// start itself, in breadth-first order over the full parent DAG.
+// Ancestors returns an iterator over ancestor commits reachable from hash, including
+// hash itself, in breadth-first order over the full parent DAG.
 //
 // The iterator yields (hash, depth) pairs where depth is the shortest number of parent
-// edges from start to the visited commit. Each commit is yielded at most once.
+// edges from hash to the visited commit. Each commit is yielded at most once.
 //
 // Callers can range over the iterator to collect results, break early, or compose with
 // other iter utilities (e.g. slices.Collect).
-func (g *Graph) Traverse(start string) iter.Seq2[string, int] {
-	if !g.HasHash(start) {
+func (g *Graph) Ancestors(hash string) iter.Seq2[string, int] {
+	if !g.HasHash(hash) {
 		return func(_ func(string, int) bool) {}
 	}
 
@@ -213,8 +213,8 @@ func (g *Graph) Traverse(start string) iter.Seq2[string, int] {
 		depth int
 	}
 
-	visited := sets.New(start)
-	queue := []step{{hash: start, depth: 0}}
+	visited := sets.New(hash)
+	queue := []step{{hash: hash, depth: 0}}
 
 	return func(yield func(string, int) bool) {
 		for len(queue) > 0 {
@@ -238,9 +238,19 @@ func (g *Graph) Traverse(start string) iter.Seq2[string, int] {
 	}
 }
 
+// AllAncestors returns all ancestor commits reachable from hash, including hash itself,
+// in breadth-first order.
+func (g *Graph) AllAncestors(hash string) []string {
+	var result []string
+	for h := range g.Ancestors(hash) {
+		result = append(result, h)
+	}
+	return result
+}
+
 // IsAncestor reports whether ancestor is reachable from descendant.
 func (g *Graph) IsAncestor(ancestor, descendant string) bool {
-	for hash := range g.Traverse(descendant) {
+	for hash := range g.Ancestors(descendant) {
 		if hash == ancestor {
 			return true
 		}
@@ -251,11 +261,7 @@ func (g *Graph) IsAncestor(ancestor, descendant string) bool {
 // AncestorsOf returns all commits reachable from hash, including hash itself, in BFS
 // order.
 func (g *Graph) AncestorsOf(hash string) []string {
-	var ancestors []string
-	for h := range g.Traverse(hash) {
-		ancestors = append(ancestors, h)
-	}
-	return ancestors
+	return g.AllAncestors(hash)
 }
 
 // CommitsBetween returns the number of commits between a and b relative to their
@@ -305,7 +311,7 @@ func (g *Graph) MergeBase(a, b string) (string, bool) {
 
 	ancestors := sets.New(g.AncestorsOf(a)...)
 
-	for hash := range g.Traverse(b) {
+	for hash := range g.Ancestors(b) {
 		if ancestors.Has(hash) {
 			return hash, true
 		}
@@ -320,7 +326,7 @@ func (g *Graph) DistanceToAncestor(descendant, ancestor string) (int, bool) {
 		return 0, false
 	}
 
-	for hash, depth := range g.Traverse(descendant) {
+	for hash, depth := range g.Ancestors(descendant) {
 		if hash == ancestor {
 			return depth, true
 		}

@@ -185,7 +185,7 @@ func TestGraph_Traverse_ReportsBFSDepth(t *testing.T) {
 	)
 
 	got := map[string]int{}
-	for hash, depth := range g.Traverse("m1") {
+	for hash, depth := range g.Ancestors("m1") {
 		got[hash] = depth
 	}
 
@@ -197,7 +197,7 @@ func TestGraph_Traverse_ReportsBFSDepth(t *testing.T) {
 		"c0": 3,
 	}
 	if len(got) != len(want) {
-		t.Fatalf("Traverse visited %v, want %v", got, want)
+		t.Fatalf("Ancestors visited %v, want %v", got, want)
 	}
 	for hash, depth := range want {
 		if got[hash] != depth {
