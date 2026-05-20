@@ -214,17 +214,17 @@ func (g *Graph) Traverse(start string, visit func(hash string, depth int) bool) 
 	queue := []step{{hash: start, depth: 0}}
 
 	for len(queue) > 0 {
-		cur := queue[0]
+		node := queue[0]
 		queue = queue[1:]
 
-		if !visit(cur.hash, cur.depth) {
+		if !visit(node.hash, node.depth) {
 			return
 		}
 
-		for _, parent := range g.parents[cur.hash] {
+		for _, parent := range g.parents[node.hash] {
 			if !visited[parent] {
 				visited[parent] = true
-				queue = append(queue, step{hash: parent, depth: cur.depth + 1})
+				queue = append(queue, step{hash: parent, depth: node.depth + 1})
 			}
 		}
 	}
