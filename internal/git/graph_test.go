@@ -185,10 +185,9 @@ func TestGraph_Traverse_ReportsBFSDepth(t *testing.T) {
 	)
 
 	got := map[string]int{}
-	g.Traverse("m1", func(hash string, depth int) bool {
+	for hash, depth := range g.Traverse("m1") {
 		got[hash] = depth
-		return true
-	})
+	}
 
 	want := map[string]int{
 		"m1": 0,

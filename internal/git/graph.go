@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"iter"
 	"maps"
 	"slices"
 	"strings"
@@ -194,17 +195,17 @@ func (g *Graph) FirstParent(hash string) (string, bool) {
 	return ps[0], true
 }
 
-// Traverse visits ancestor commits reachable from start, including start itself, in
-// breadth-first order over the full parent DAG.
+// Traverse returns an iterator over ancestor commits reachable from start, including
+// start itself, in breadth-first order over the full parent DAG.
 //
-// Guarantees:
-// - only ancestors of start are visited
-// - each commit is visited at most once
-// - depth is the shortest number of parent edges from start to the visited commit
-// - traversal stops immediately when visit returns false
-func (g *Graph) Traverse(start string, visit func(hash string, depth int) bool) {
+// The iterator yields (hash, depth) pairs where depth is the shortest number of parent
+// edges from start to the visited commit. Each commit is yielded at most once.
+//
+// Callers can range over the iterator to collect results, break early, or compose with
+// other iter utilities (e.g. slices.Collect).
+func (g *Graph) Traverse(start string) iter.Seq2[string, int] {
 	if !g.HasHash(start) {
-		return
+		return func(_ func(string, int) bool) {}
 	}
 
 	type step struct {
@@ -215,18 +216,20 @@ func (g *Graph) Traverse(start string, visit func(hash string, depth int) bool) 
 	visited := sets.New(start)
 	queue := []step{{hash: start, depth: 0}}
 
-	for len(queue) > 0 {
-		node := queue[0]
-		queue = queue[1:]
+	return func(yield func(string, int) bool) {
+		for len(queue) > 0 {
+			node := queue[0]
+			queue = queue[1:]
 
-		if !visit(node.hash, node.depth) {
-			return
-		}
+			if !yield(node.hash, node.depth) {
+				return
+			}
 
-		for _, parent := range g.parents[node.hash] {
-			if !visited.Has(parent) {
-				visited.Add(parent)
-				queue = append(queue, step{hash: parent, depth: node.depth + 1})
+			for _, parent := range g.parents[node.hash] {
+				if !visited.Has(parent) {
+					visited.Add(parent)
+					queue = append(queue, step{hash: parent, depth: node.depth + 1})
+				}
 			}
 		}
 	}
@@ -234,25 +237,21 @@ func (g *Graph) Traverse(start string, visit func(hash string, depth int) bool) 
 
 // IsAncestor reports whether ancestor is reachable from descendant.
 func (g *Graph) IsAncestor(ancestor, descendant string) bool {
-	var found bool
-	g.Traverse(descendant, func(hash string, _ int) bool {
+	for hash := range g.Traverse(descendant) {
 		if hash == ancestor {
-			found = true
-			return false
+			return true
 		}
-		return true
-	})
-	return found
+	}
+	return false
 }
 
 // AncestorsOf returns all commits reachable from hash, including hash itself, in BFS
 // order.
 func (g *Graph) AncestorsOf(hash string) []string {
 	var ancestors []string
-	g.Traverse(hash, func(h string, _ int) bool {
+	for h := range g.Traverse(hash) {
 		ancestors = append(ancestors, h)
-		return true
-	})
+	}
 	return ancestors
 }
 
@@ -303,16 +302,12 @@ func (g *Graph) MergeBase(a, b string) (string, bool) {
 
 	ancestors := sets.New(g.AncestorsOf(a)...)
 
-	var base string
-	g.Traverse(b, func(hash string, _ int) bool {
+	for hash := range g.Traverse(b) {
 		if ancestors.Has(hash) {
-			base = hash
-			return false
+			return hash, true
 		}
-		return true
-	})
-
-	return base, base != ""
+	}
+	return "", false
 }
 
 // DistanceToAncestor returns the shortest number of parent edges from descendant to
@@ -322,15 +317,10 @@ func (g *Graph) DistanceToAncestor(descendant, ancestor string) (int, bool) {
 		return 0, false
 	}
 
-	var distance int
-	var found bool
-	g.Traverse(descendant, func(hash string, depth int) bool {
+	for hash, depth := range g.Traverse(descendant) {
 		if hash == ancestor {
-			distance = depth
-			found = true
-			return false
+			return depth, true
 		}
-		return true
-	})
-	return distance, found
+	}
+	return 0, false
 }
