@@ -7,10 +7,11 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"maps"
 	"os/exec"
 	"slices"
 	"strings"
+
+	"github.com/danroc/git-stack/internal/sets"
 )
 
 // Client executes git commands in a fixed working directory.
@@ -220,7 +221,7 @@ func (g *Client) ResetStackConfig() ([]string, error) {
 		return nil, err
 	}
 
-	branches := make(map[string]bool)
+	branches := sets.New[string]()
 
 	for _, line := range splitLines(out) {
 		key, _, ok := strings.Cut(line, "=")
@@ -235,14 +236,14 @@ func (g *Client) ResetStackConfig() ([]string, error) {
 			[]string{"stackparent", "stackmergebase"},
 			strings.ToLower(variable),
 		) {
-			branches[branch] = true
+			branches.Add(branch)
 		}
 	}
-	if len(branches) == 0 {
+	if branches.Len() == 0 {
 		return nil, nil
 	}
 
-	for branch := range branches {
+	for branch := range branches.Items() {
 		if _, err := g.run(
 			"config",
 			"--local",
@@ -268,7 +269,7 @@ func (g *Client) ResetStackConfig() ([]string, error) {
 	g.stackParentCache = nil
 	g.stackMergeBaseCache = nil
 
-	return slices.Sorted(maps.Keys(branches)), nil
+	return slices.Sorted(branches.Items()), nil
 }
 
 // parseBranchConfigKey extracts branch name and variable from a key with shape

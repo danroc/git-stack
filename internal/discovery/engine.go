@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/danroc/git-stack/internal/git"
+	"github.com/danroc/git-stack/internal/sets"
 )
 
 // Branch is a branch name paired with its head.
@@ -321,7 +322,7 @@ func (e *Engine) walkResolvedParents(
 	branch string,
 	visit func(parent string) error,
 ) error {
-	seen := map[string]bool{branch: true}
+	seen := sets.New(branch)
 	for current := branch; current != e.base; {
 		parent, err := e.resolveParent(current)
 		if err != nil {
@@ -330,13 +331,13 @@ func (e *Engine) walkResolvedParents(
 		if parent == "" {
 			parent = e.base
 		}
-		if seen[parent] {
+		if seen.Has(parent) {
 			return fmt.Errorf("cycle detected while resolving parent of %q", current)
 		}
 		if err := visit(parent); err != nil {
 			return err
 		}
-		seen[parent] = true
+		seen.Add(parent)
 		current = parent
 	}
 	return nil

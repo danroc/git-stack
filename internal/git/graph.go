@@ -5,6 +5,8 @@ import (
 	"maps"
 	"slices"
 	"strings"
+
+	"github.com/danroc/git-stack/internal/sets"
 )
 
 // Graph is an in-memory commit DAG covering all commits between local branch heads and
@@ -210,7 +212,7 @@ func (g *Graph) Traverse(start string, visit func(hash string, depth int) bool) 
 		depth int
 	}
 
-	visited := map[string]bool{start: true}
+	visited := sets.New(start)
 	queue := []step{{hash: start, depth: 0}}
 
 	for len(queue) > 0 {
@@ -222,8 +224,8 @@ func (g *Graph) Traverse(start string, visit func(hash string, depth int) bool) 
 		}
 
 		for _, parent := range g.parents[node.hash] {
-			if !visited[parent] {
-				visited[parent] = true
+			if !visited.Has(parent) {
+				visited.Add(parent)
 				queue = append(queue, step{hash: parent, depth: node.depth + 1})
 			}
 		}
@@ -299,14 +301,11 @@ func (g *Graph) MergeBase(a, b string) (string, bool) {
 		return "", false
 	}
 
-	ancestors := make(map[string]bool)
-	for _, hash := range g.AncestorsOf(a) {
-		ancestors[hash] = true
-	}
+	ancestors := sets.New(g.AncestorsOf(a)...)
 
 	var base string
 	g.Traverse(b, func(hash string, _ int) bool {
-		if ancestors[hash] {
+		if ancestors.Has(hash) {
 			base = hash
 			return false
 		}
