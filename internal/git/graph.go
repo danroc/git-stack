@@ -228,7 +228,10 @@ func (g *Graph) Traverse(start string) iter.Seq2[string, int] {
 			for _, parent := range g.parents[node.hash] {
 				if !visited.Has(parent) {
 					visited.Add(parent)
-					queue = append(queue, step{hash: parent, depth: node.depth + 1})
+					queue = append(queue, step{
+						hash:  parent,
+						depth: node.depth + 1,
+					})
 				}
 			}
 		}
