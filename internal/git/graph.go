@@ -238,16 +238,6 @@ func (g *Graph) Ancestors(hash string) iter.Seq2[string, int] {
 	}
 }
 
-// AllAncestors returns all ancestor commits reachable from hash, including hash itself,
-// in breadth-first order.
-func (g *Graph) AllAncestors(hash string) []string {
-	var result []string
-	for h := range g.Ancestors(hash) {
-		result = append(result, h)
-	}
-	return result
-}
-
 // IsAncestor reports whether ancestor is reachable from descendant.
 func (g *Graph) IsAncestor(ancestor, descendant string) bool {
 	for hash := range g.Ancestors(descendant) {
@@ -258,10 +248,14 @@ func (g *Graph) IsAncestor(ancestor, descendant string) bool {
 	return false
 }
 
-// AncestorsOf returns all commits reachable from hash, including hash itself, in BFS
-// order.
-func (g *Graph) AncestorsOf(hash string) []string {
-	return g.AllAncestors(hash)
+// AllAncestors returns all ancestor commits reachable from hash, including hash itself,
+// in breadth-first order.
+func (g *Graph) AllAncestors(hash string) []string {
+	var result []string
+	for h := range g.Ancestors(hash) {
+		result = append(result, h)
+	}
+	return result
 }
 
 // CommitsBetween returns the number of commits between a and b relative to their
@@ -309,7 +303,7 @@ func (g *Graph) MergeBase(a, b string) (string, bool) {
 		return "", false
 	}
 
-	ancestors := sets.New(g.AncestorsOf(a)...)
+	ancestors := sets.New(g.AllAncestors(a)...)
 
 	for hash := range g.Ancestors(b) {
 		if ancestors.Has(hash) {
