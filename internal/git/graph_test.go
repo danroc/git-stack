@@ -357,28 +357,15 @@ func rev(t *testing.T, dir, ref string) string {
 	return strings.TrimSpace(string(out))
 }
 
-func TestGraph_AllAncestors(t *testing.T) {
+func TestGraph_Ancestors_MissingHash(t *testing.T) {
 	g := linearGraph()
 
-	ancestors := g.AllAncestors("c2")
-	want := []string{"c2", "c1", "c0"}
-	if !slices.Equal(ancestors, want) {
-		t.Errorf("AllAncestors(c2) = %v, want %v", ancestors, want)
+	count := 0
+	for range g.Ancestors("missing") {
+		count++
 	}
-
-	ancestors = g.AllAncestors("c1")
-	want = []string{"c1", "c0"}
-	if !slices.Equal(ancestors, want) {
-		t.Errorf("AllAncestors(c1) = %v, want %v", ancestors, want)
-	}
-}
-
-func TestGraph_AllAncestors_MissingHash(t *testing.T) {
-	g := linearGraph()
-
-	ancestors := g.AllAncestors("missing")
-	if len(ancestors) != 0 {
-		t.Errorf("AllAncestors(missing) = %v, want []", ancestors)
+	if count != 0 {
+		t.Errorf("Ancestors(missing) yielded %d items, want 0", count)
 	}
 }
 

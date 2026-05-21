@@ -248,16 +248,6 @@ func (g *Graph) IsAncestor(ancestor, descendant string) bool {
 	return false
 }
 
-// AllAncestors returns all ancestor commits reachable from hash, including hash itself,
-// in breadth-first order.
-func (g *Graph) AllAncestors(hash string) []string {
-	var result []string
-	for h := range g.Ancestors(hash) {
-		result = append(result, h)
-	}
-	return result
-}
-
 // CommitsBetween returns the number of commits between a and b relative to their
 // closest common ancestor in the graph, as measured along first-parent chains only.
 //
@@ -303,7 +293,7 @@ func (g *Graph) MergeBase(a, b string) (string, bool) {
 		return "", false
 	}
 
-	ancestors := sets.New(g.AllAncestors(a)...)
+	ancestors := sets.CollectKeys(g.Ancestors(a))
 
 	for hash := range g.Ancestors(b) {
 		if ancestors.Has(hash) {
