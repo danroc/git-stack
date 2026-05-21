@@ -78,7 +78,7 @@ func TestCollectDeduplicates(t *testing.T) {
 }
 
 func TestCollectEmpty(t *testing.T) {
-	s := Collect(iter.Seq[string](func(yield func(string) bool) {}))
+	s := Collect(iter.Seq[string](func(_ func(string) bool) {}))
 	if s.Len() != 0 {
 		t.Fatalf("Len() = %d, want 0", s.Len())
 	}
@@ -102,7 +102,7 @@ func TestCollectKeysIgnoresValues(t *testing.T) {
 }
 
 func TestCollectKeysEmpty(t *testing.T) {
-	s := CollectKeys(iter.Seq2[string, int](func(yield func(string, int) bool) {}))
+	s := CollectKeys(iter.Seq2[string, int](func(_ func(string, int) bool) {}))
 	if s.Len() != 0 {
 		t.Fatalf("Len() = %d, want 0", s.Len())
 	}
