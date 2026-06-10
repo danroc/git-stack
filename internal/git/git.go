@@ -251,25 +251,8 @@ func (g *Client) ResetStackConfig() ([]string, error) {
 	}
 
 	for branch := range branches.Items() {
-		if _, err := g.run(
-			"config",
-			"--local",
-			"--unset",
-			"branch."+branch+".stackParent",
-		); err != nil {
-			if !isExitCode(err, 1) && !isExitCode(err, 5) {
-				return nil, err
-			}
-		}
-		if _, err := g.run(
-			"config",
-			"--local",
-			"--unset",
-			"branch."+branch+".stackMergeBase",
-		); err != nil {
-			if !isExitCode(err, 1) && !isExitCode(err, 5) {
-				return nil, err
-			}
+		if err := g.UnsetStackConfig(branch); err != nil {
+			return nil, err
 		}
 	}
 
