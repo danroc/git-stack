@@ -283,3 +283,105 @@ func (s *Stack) Move(branch, newParent string, fn NotifyFn) error {
 
 	return s.restoreBranch(current)
 }
+
+// Fold squashes or replays branch into its stack parent, cascades descendants,
+// optionally deletes branch, and leaves HEAD on the parent.
+func (s *Stack) Fold(branch string, opts FoldOptions, fn NotifyFn) error {
+	notify := orNoop(fn)
+
+	if branch == s.disc.BaseBranch() {
+		return fmt.Errorf("cannot fold base branch %q", branch)
+	}
+
+	parent, err := s.disc.Parent(branch)
+	if err != nil {
+		return fmt.Errorf("find parent of %s: %w", branch, err)
+	}
+
+	foldedParent := branch
+	foldStep := Step{Branch: branch, Parent: parent}
+	children := s.disc.SubtreeChildren(branch)
+
+	if err := runStep(notify, foldStep, func() error {
+		return s.foldOntoParent(branch, parent, opts)
+	}); err != nil {
+		return err
+	}
+
+	for _, dep := range children {
+		rebaseParent := dep.Parent
+		if dep.Parent == foldedParent {
+			rebaseParent = parent
+		}
+		branch := dep.Branch.Name
+		if err := runStep(
+			notify,
+			Step{Branch: branch, Parent: rebaseParent},
+			func() error {
+				if rebaseParent != dep.Parent {
+					return s.checkoutAndRebase(branch, rebaseParent)
+				}
+				if err := s.git.Checkout(branch); err != nil {
+					return fmt.Errorf("checkout %s: %w", branch, err)
+				}
+				if err := s.git.Rebase(rebaseParent); err != nil {
+					return fmt.Errorf("rebase %s onto %s: %w", branch, rebaseParent, err)
+				}
+				return nil
+			},
+		); err != nil {
+			return err
+		}
+	}
+
+	if err := s.git.UnsetStackConfig(branch); err != nil {
+		return fmt.Errorf("clear stack config for %s: %w", branch, err)
+	}
+
+	if opts.DeleteBranch {
+		if err := s.git.DeleteBranch(branch); err != nil {
+			return fmt.Errorf("delete branch %s: %w", branch, err)
+		}
+	}
+
+	return s.git.Checkout(parent)
+}
+
+func (s *Stack) foldOntoParent(branch, parent string, opts FoldOptions) error {
+	if opts.Squash {
+		if err := s.git.Checkout(parent); err != nil {
+			return fmt.Errorf("checkout %s: %w", parent, err)
+		}
+		if err := s.git.MergeSquash(branch); err != nil {
+			return fmt.Errorf("squash %s into %s: %w", branch, parent, err)
+		}
+		has, err := s.git.HasStagedChanges()
+		if err != nil {
+			return err
+		}
+		if has {
+			msg := opts.Message
+			if msg == "" {
+				msg = fmt.Sprintf("Fold branch '%s' into %s", branch, parent)
+			}
+			if err := s.git.Commit(msg); err != nil {
+				return fmt.Errorf("commit fold of %s into %s: %w", branch, parent, err)
+			}
+		}
+		return nil
+	}
+
+	if err := s.git.Checkout(branch); err != nil {
+		return fmt.Errorf("checkout %s: %w", branch, err)
+	}
+	if err := s.git.Rebase(parent); err != nil {
+		return fmt.Errorf("rebase %s onto %s: %w", branch, parent, err)
+	}
+	if err := s.git.Checkout(parent); err != nil {
+		return fmt.Errorf("checkout %s: %w", parent, err)
+	}
+	if err := s.git.MergeFF(branch); err != nil {
+		return fmt.Errorf("fast-forward %s to %s: %w", parent, branch, err)
+	}
+	return nil
+}
