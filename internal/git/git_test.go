@@ -714,6 +714,31 @@ func TestDeleteBranch(t *testing.T) {
 	}
 }
 
+func TestDeleteBranch_AfterSquashMerge(t *testing.T) {
+	c, dir := initRepo(t)
+	runGit(t, dir, "checkout", "-q", "-b", "feat-2")
+	if err := os.WriteFile(filepath.Join(dir, "f"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "f")
+	runGit(t, dir, "commit", "-m", "f2")
+
+	runGit(t, dir, "checkout", "-q", "main")
+	if err := c.MergeSquash("feat-2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Commit("squashed"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := c.DeleteBranch("feat-2"); err != nil {
+		t.Fatal(err)
+	}
+	if runGitHasBranch(dir, "feat-2") {
+		t.Fatal("feat-2 should be deleted after squash merge")
+	}
+}
+
 func TestUnsetStackConfig(t *testing.T) {
 	c, dir := initRepo(t)
 	runGit(t, dir, "checkout", "-q", "-b", "feat-1")
