@@ -325,7 +325,12 @@ func (s *Stack) Fold(branch string, opts FoldOptions, fn NotifyFn) error {
 					return fmt.Errorf("checkout %s: %w", branch, err)
 				}
 				if err := s.git.Rebase(rebaseParent); err != nil {
-					return fmt.Errorf("rebase %s onto %s: %w", branch, rebaseParent, err)
+					return fmt.Errorf(
+						"rebase %s onto %s: %w",
+						branch,
+						rebaseParent,
+						err,
+					)
 				}
 				return nil
 			},

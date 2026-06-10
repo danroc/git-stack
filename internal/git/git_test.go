@@ -644,7 +644,7 @@ func TestMergeSquashAndCommit(t *testing.T) {
 	runGit(t, dir, "commit", "--allow-empty", "-m", "f1")
 	runGit(t, dir, "checkout", "-q", "main")
 	runGit(t, dir, "checkout", "-q", "-b", "feat-2")
-	if err := os.WriteFile(filepath.Join(dir, "f"), []byte("x\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "f"), []byte("x\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	runGit(t, dir, "add", "f")
@@ -717,7 +717,7 @@ func TestDeleteBranch(t *testing.T) {
 func TestDeleteBranch_AfterSquashMerge(t *testing.T) {
 	c, dir := initRepo(t)
 	runGit(t, dir, "checkout", "-q", "-b", "feat-2")
-	if err := os.WriteFile(filepath.Join(dir, "f"), []byte("x\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "f"), []byte("x\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	runGit(t, dir, "add", "f")

@@ -838,7 +838,10 @@ func TestFold_SkipCommitWhenNoStagedChanges(t *testing.T) {
 	}
 	for _, c := range repoNoStage.calls {
 		if strings.HasPrefix(c, "Commit:") {
-			t.Fatalf("Commit should be skipped when no staged changes, got %v", repoNoStage.calls)
+			t.Fatalf(
+				"Commit should be skipped when no staged changes, got %v",
+				repoNoStage.calls,
+			)
 		}
 	}
 }

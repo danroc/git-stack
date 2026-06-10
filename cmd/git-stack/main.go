@@ -322,11 +322,21 @@ func cmdFold() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVar(&squash, "squash", true, "squash into a single commit on the parent")
-	cmd.Flags().BoolVar(&noSquash, "no-squash", false, "replay commits onto the parent without squashing")
-	cmd.Flags().BoolVar(&deleteBranch, "delete-branch", true, "delete the folded branch")
-	cmd.Flags().BoolVar(&keepBranch, "keep-branch", false, "keep the folded branch")
-	cmd.Flags().StringVarP(&message, "message", "m", "", "commit message for --squash (default: auto)")
+	cmd.Flags().BoolVar(
+		&squash, "squash", true, "squash into a single commit on the parent",
+	)
+	cmd.Flags().BoolVar(
+		&noSquash, "no-squash", false, "replay commits onto the parent without squashing",
+	)
+	cmd.Flags().BoolVar(
+		&deleteBranch, "delete-branch", true, "delete the folded branch",
+	)
+	cmd.Flags().BoolVar(
+		&keepBranch, "keep-branch", false, "keep the folded branch",
+	)
+	cmd.Flags().StringVarP(
+		&message, "message", "m", "", "commit message for --squash (default: auto)",
+	)
 	return cmd
 }
 

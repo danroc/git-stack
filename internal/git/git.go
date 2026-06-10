@@ -364,7 +364,12 @@ func (g *Client) DeleteBranch(name string) error {
 // UnsetStackConfig removes stackParent and stackMergeBase for a single branch.
 func (g *Client) UnsetStackConfig(branch string) error {
 	for _, key := range []string{"stackParent", "stackMergeBase"} {
-		if _, err := g.run("config", "--local", "--unset", "branch."+branch+"."+key); err != nil {
+		if _, err := g.run(
+			"config",
+			"--local",
+			"--unset",
+			"branch."+branch+"."+key,
+		); err != nil {
 			if !isExitCode(err, 1) && !isExitCode(err, 5) {
 				return err
 			}
