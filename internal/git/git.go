@@ -66,6 +66,13 @@ func (g *Client) run(args ...string) (string, error) {
 	return strings.TrimSpace(stdout.String()), nil
 }
 
+// runQuiet executes a git command and returns cmd.Run()'s error without wrapping it.
+func (g *Client) runQuiet(args ...string) error {
+	cmd := exec.Command("git", args...) //nolint:gosec
+	cmd.Dir = g.dir
+	return cmd.Run()
+}
+
 // isExitCode reports whether err wraps an exec.ExitError with the given code.
 func isExitCode(err error, code int) bool {
 	var exitErr *exec.ExitError
@@ -333,6 +340,60 @@ func (g *Client) Push(branch string) error {
 func (g *Client) Pull() error {
 	_, err := g.run("pull", "--ff-only")
 	return err
+}
+
+// MergeSquash stages changes from ref onto the current branch without committing.
+func (g *Client) MergeSquash(ref string) error {
+	_, err := g.run("merge", "--squash", ref)
+	return err
+}
+
+// HasStagedChanges reports whether the index has staged changes.
+func (g *Client) HasStagedChanges() (bool, error) {
+	err := g.runQuiet("diff", "--cached", "--quiet")
+	if err == nil {
+		return false, nil
+	}
+	if isExitCode(err, 1) {
+		return true, nil
+	}
+	return false, err
+}
+
+// Commit creates a commit on the current branch with the given message.
+func (g *Client) Commit(message string) error {
+	_, err := g.run("commit", "-m", message)
+	return err
+}
+
+// MergeFF fast-forwards the current branch to ref.
+func (g *Client) MergeFF(ref string) error {
+	_, err := g.run("merge", "--ff-only", ref)
+	return err
+}
+
+// DeleteBranch deletes a local branch.
+func (g *Client) DeleteBranch(name string) error {
+	_, err := g.run("branch", "-d", name)
+	return err
+}
+
+// UnsetStackConfig removes stackParent and stackMergeBase for a single branch.
+func (g *Client) UnsetStackConfig(branch string) error {
+	for _, key := range []string{"stackParent", "stackMergeBase"} {
+		if _, err := g.run("config", "--local", "--unset", "branch."+branch+"."+key); err != nil {
+			if !isExitCode(err, 1) && !isExitCode(err, 5) {
+				return err
+			}
+		}
+	}
+	if g.stackParentCache != nil {
+		delete(g.stackParentCache, branch)
+	}
+	if g.stackMergeBaseCache != nil {
+		delete(g.stackMergeBaseCache, branch)
+	}
+	return nil
 }
 
 // Rebase rebases the current branch onto the given target.

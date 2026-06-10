@@ -3,7 +3,9 @@ package git
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -634,4 +636,97 @@ func runGitHasBranch(dir, branch string) bool {
 		"git", "-C", dir, "rev-parse", "--verify", "refs/heads/"+branch,
 	)
 	return cmd.Run() == nil
+}
+
+func TestMergeSquashAndCommit(t *testing.T) {
+	c, dir := initRepo(t)
+	runGit(t, dir, "checkout", "-q", "-b", "feat-1")
+	runGit(t, dir, "commit", "--allow-empty", "-m", "f1")
+	runGit(t, dir, "checkout", "-q", "main")
+	runGit(t, dir, "checkout", "-q", "-b", "feat-2")
+	if err := os.WriteFile(filepath.Join(dir, "f"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "f")
+	runGit(t, dir, "commit", "-m", "f2")
+
+	runGit(t, dir, "checkout", "-q", "main")
+	if err := c.MergeSquash("feat-2"); err != nil {
+		t.Fatal(err)
+	}
+	has, err := c.HasStagedChanges()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !has {
+		t.Fatal("expected staged changes after merge --squash")
+	}
+	if err := c.Commit("squashed"); err != nil {
+		t.Fatal(err)
+	}
+	count := runGit(t, dir, "rev-list", "--count", "main")
+	if count != "2" {
+		t.Fatalf("main commit count = %s, want 2", count)
+	}
+}
+
+func TestHasStagedChanges_Empty(t *testing.T) {
+	c, dir := initRepo(t)
+	runGit(t, dir, "checkout", "-q", "-b", "feat-1")
+	runGit(t, dir, "checkout", "-q", "main")
+
+	has, err := c.HasStagedChanges()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if has {
+		t.Fatal("expected no staged changes on clean tree")
+	}
+}
+
+func TestMergeFF(t *testing.T) {
+	c, dir := initRepo(t)
+	runGit(t, dir, "checkout", "-q", "-b", "feat-1")
+	runGit(t, dir, "commit", "--allow-empty", "-m", "f1")
+	feat1 := runGit(t, dir, "rev-parse", "feat-1")
+	runGit(t, dir, "checkout", "-q", "main")
+
+	if err := c.MergeFF("feat-1"); err != nil {
+		t.Fatal(err)
+	}
+	main := runGit(t, dir, "rev-parse", "main")
+	if main != feat1 {
+		t.Fatalf("main = %s, want %s", main, feat1)
+	}
+}
+
+func TestDeleteBranch(t *testing.T) {
+	c, dir := initRepo(t)
+	runGit(t, dir, "checkout", "-q", "-b", "feat-1")
+	runGit(t, dir, "checkout", "-q", "main")
+
+	if err := c.DeleteBranch("feat-1"); err != nil {
+		t.Fatal(err)
+	}
+	branches := runGit(t, dir, "branch", "--list")
+	if strings.Contains(branches, "feat-1") {
+		t.Fatalf("feat-1 still listed: %q", branches)
+	}
+}
+
+func TestUnsetStackConfig(t *testing.T) {
+	c, dir := initRepo(t)
+	runGit(t, dir, "checkout", "-q", "-b", "feat-1")
+	if err := c.RecordStackParent("feat-1", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.UnsetStackConfig("feat-1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := c.StackParent("feat-1"); ok {
+		t.Fatal("expected stack parent cleared")
+	}
+	if _, ok := c.StackMergeBase("feat-1"); ok {
+		t.Fatal("expected stack merge-base cleared")
+	}
 }
