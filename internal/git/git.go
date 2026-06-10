@@ -372,18 +372,9 @@ func (g *Client) MergeFF(ref string) error {
 	return err
 }
 
-// DeleteBranch deletes a local branch. It tries a safe delete (-d) first; after a
-// squash merge the branch tip is not reachable from HEAD, so git reports "not fully
-// merged" and we fall back to force delete (-D).
+// DeleteBranch force-deletes a local branch.
 func (g *Client) DeleteBranch(name string) error {
-	_, err := g.run("branch", "-d", name)
-	if err == nil {
-		return nil
-	}
-	var gitErr *Error
-	if errors.As(err, &gitErr) && strings.Contains(gitErr.Stderr, "not fully merged") {
-		_, err = g.run("branch", "-D", name)
-	}
+	_, err := g.run("branch", "-D", name)
 	return err
 }
 
