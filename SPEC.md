@@ -118,6 +118,26 @@ in-progress rebase state so the user can resolve it and continue manually.
 
 ---
 
+**`git-stack fold [branch]`**
+
+Folds a branch into its stack parent for local stack hygiene. B's commits land on A,
+B is removed from the stack (and deleted by default), and any descendants are rebased
+onto the updated parent tip. If `[branch]` is omitted, the currently checked-out branch
+is folded. HEAD ends on the parent.
+
+Given `main -> A -> B -> C`, `git-stack fold B` runs:
+
+1. Squash (or replay) B's commits onto A.
+2. Rebase C onto the updated tip of A.
+3. Update `stackParent` for direct children of B to point at A.
+4. Delete B (unless `--keep-branch`).
+5. Check out A.
+
+Flags: `--squash` (default), `--no-squash`, `--delete-branch` (default),
+`--keep-branch`, `-m <message>`.
+
+---
+
 **`git-stack view`**
 
 Renders a linear representation of the current stack. The active branch is marked with

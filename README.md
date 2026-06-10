@@ -67,6 +67,12 @@ git-stack move feat-2 main
 This rebases `feat-2` from `feat-1` onto `main`, then cascades the rebase through
 `feat-3` so the chain stays linear.
 
+Fold a branch into its parent:
+
+```sh
+git-stack fold feat-1   # feat-1's work lands on main; feat-2 rebased onto main
+```
+
 ## Commands
 
 | Command                      | Description                                                          |
@@ -77,6 +83,7 @@ This rebases `feat-2` from `feat-1` onto `main`, then cascades the rebase throug
 | `push`                       | Push every branch. Sets upstream to `origin/<branch>` on first push. |
 | `pull`                       | Pull every branch with `--ff-only`, bottom to top.                   |
 | `move [branch] <new-parent>` | Reparent a branch and cascade the rebase through its descendants.    |
+| `fold [branch]`              | Fold a branch into its parent; cascade descendants; delete branch by default. |
 | `reset`                      | Remove all `stackParent` entries from local Git config.              |
 | `version`                    | Print the version.                                                   |
 
