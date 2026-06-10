@@ -38,6 +38,7 @@ func main() {
 		cmdPull(),
 		cmdRebase(),
 		cmdReset(),
+		cmdFold(),
 		cmdVersion(),
 	)
 
@@ -95,6 +96,8 @@ func stepPrinter(w io.Writer, verb string) stack.NotifyFn {
 				"Moving %s from %s to %s... ",
 				s.Branch, s.Parent, s.To,
 			)
+		case s.Parent != "" && verb == "Folding":
+			_, _ = fmt.Fprintf(w, "Folding %s into %s... ", s.Branch, s.Parent)
 		case s.Parent != "":
 			_, _ = fmt.Fprintf(w, "%s %s onto %s... ", verb, s.Branch, s.Parent)
 		default:
@@ -279,6 +282,52 @@ func cmdMove() *cobra.Command {
 			})(cmd, args)
 		},
 	}
+}
+
+func cmdFold() *cobra.Command {
+	var (
+		squash       = true
+		noSquash     bool
+		deleteBranch = true
+		keepBranch   bool
+		message      string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "fold [branch]",
+		Short: "Fold a branch into its stack parent and remove it from the stack",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runStackCmd(func(g *git.Client, s *stack.Stack) error {
+				branch := ""
+				if len(args) == 1 {
+					branch = args[0]
+				} else {
+					var err error
+					branch, err = g.CurrentBranch()
+					if err != nil {
+						return err
+					}
+				}
+
+				opts := stack.FoldOptions{
+					Squash:       squash && !noSquash,
+					DeleteBranch: deleteBranch && !keepBranch,
+					Message:      message,
+				}
+				return runAndPrintGitStderr(func() error {
+					return s.Fold(branch, opts, stepPrinter(os.Stdout, "Folding"))
+				})
+			})(cmd, args)
+		},
+	}
+
+	cmd.Flags().BoolVar(&squash, "squash", true, "squash into a single commit on the parent")
+	cmd.Flags().BoolVar(&noSquash, "no-squash", false, "replay commits onto the parent without squashing")
+	cmd.Flags().BoolVar(&deleteBranch, "delete-branch", true, "delete the folded branch")
+	cmd.Flags().BoolVar(&keepBranch, "keep-branch", false, "keep the folded branch")
+	cmd.Flags().StringVarP(&message, "message", "m", "", "commit message for --squash (default: auto)")
+	return cmd
 }
 
 func cmdVersion() *cobra.Command {
