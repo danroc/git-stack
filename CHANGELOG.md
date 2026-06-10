@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-10
+
 ### Added
 
 - Add `git-stack fold` to fold a branch into its stack parent, cascade descendants, and optionally delete the folded branch.
@@ -29,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Worktree support
   - `--base <branch>` flag on all commands
 
-[Unreleased]: https://github.com/danroc/git-stack/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/danroc/git-stack/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/danroc/git-stack/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/danroc/git-stack/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/danroc/git-stack/releases/tag/v0.1.0
