@@ -703,6 +703,155 @@ func TestMove_ParentError(t *testing.T) {
 	}
 }
 
+func TestFold_LeafSquash(t *testing.T) {
+	repo := &fakeRepository{currentBranch: "feat-1"}
+	disc := &fakeDiscoverer{
+		base:    "main",
+		parents: map[string]string{"feat-1": "main"},
+	}
+
+	opts := FoldOptions{Squash: true, DeleteBranch: true}
+	if err := newMoveStack(repo, disc).Fold("feat-1", opts, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := []string{
+		"Checkout:main",
+		"MergeSquash:feat-1",
+		"HasStagedChanges",
+		"Commit:Fold branch 'feat-1' into main",
+		"UnsetStackConfig:feat-1",
+		"DeleteBranch:feat-1",
+		"Checkout:main",
+	}
+	if !equalStrings(repo.calls, want) {
+		t.Errorf("calls =\n  %v\nwant =\n  %v", repo.calls, want)
+	}
+}
+
+func TestFold_CascadesDescendants(t *testing.T) {
+	repo := &fakeRepository{currentBranch: "feat-1"}
+	disc := &fakeDiscoverer{
+		base:    "main",
+		parents: map[string]string{"feat-1": "main"},
+		subtrees: map[string][]discovery.BranchWithParent{
+			"feat-1": {
+				{Branch: discovery.Branch{Name: "feat-2"}, Parent: "feat-1"},
+				{Branch: discovery.Branch{Name: "feat-3"}, Parent: "feat-2"},
+			},
+		},
+	}
+
+	opts := FoldOptions{Squash: true, DeleteBranch: true}
+	if err := newMoveStack(repo, disc).Fold("feat-1", opts, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := []string{
+		"Checkout:main",
+		"MergeSquash:feat-1",
+		"HasStagedChanges",
+		"Commit:Fold branch 'feat-1' into main",
+		"Checkout:feat-2",
+		"Rebase:main",
+		"Checkout:feat-3",
+		"Rebase:feat-2",
+		"UnsetStackConfig:feat-1",
+		"DeleteBranch:feat-1",
+		"Checkout:main",
+	}
+	if !equalStrings(repo.calls, want) {
+		t.Errorf("calls =\n  %v\nwant =\n  %v", repo.calls, want)
+	}
+	if !equalStrings(disc.setParentLog, []string{"feat-2:main"}) {
+		t.Errorf("SetParent log = %v, want [feat-2:main]", disc.setParentLog)
+	}
+}
+
+func TestFold_NoSquash(t *testing.T) {
+	repo := &fakeRepository{currentBranch: "feat-1"}
+	disc := &fakeDiscoverer{
+		base:    "main",
+		parents: map[string]string{"feat-1": "main"},
+	}
+
+	opts := FoldOptions{Squash: false, DeleteBranch: true}
+	if err := newMoveStack(repo, disc).Fold("feat-1", opts, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := []string{
+		"Checkout:feat-1",
+		"Rebase:main",
+		"Checkout:main",
+		"MergeFF:feat-1",
+		"UnsetStackConfig:feat-1",
+		"DeleteBranch:feat-1",
+		"Checkout:main",
+	}
+	if !equalStrings(repo.calls, want) {
+		t.Errorf("calls = %v, want %v", repo.calls, want)
+	}
+}
+
+func TestFold_KeepBranch(t *testing.T) {
+	repo := &fakeRepository{currentBranch: "feat-1"}
+	disc := &fakeDiscoverer{
+		base:    "main",
+		parents: map[string]string{"feat-1": "main"},
+	}
+
+	opts := FoldOptions{Squash: true, DeleteBranch: false}
+	if err := newMoveStack(repo, disc).Fold("feat-1", opts, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, c := range repo.calls {
+		if c == "DeleteBranch:feat-1" {
+			t.Fatal("DeleteBranch should not be called with DeleteBranch=false")
+		}
+	}
+}
+
+func TestFold_RejectsBase(t *testing.T) {
+	disc := &fakeDiscoverer{base: "main"}
+	err := newMoveStack(&fakeRepository{}, disc).Fold(
+		"main",
+		FoldOptions{Squash: true, DeleteBranch: true},
+		nil,
+	)
+	if err == nil || !strings.Contains(err.Error(), "base") {
+		t.Fatalf("got %v, want base error", err)
+	}
+}
+
+func TestFold_SkipCommitWhenNoStagedChanges(t *testing.T) {
+	repo := &fakeRepository{currentBranch: "feat-1"}
+	repoNoStage := &noStageRepo{fakeRepository: *repo}
+	disc := &fakeDiscoverer{
+		base:    "main",
+		parents: map[string]string{"feat-1": "main"},
+	}
+
+	opts := FoldOptions{Squash: true, DeleteBranch: true}
+	if err := newMoveStack(repoNoStage, disc).Fold("feat-1", opts, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, c := range repoNoStage.calls {
+		if strings.HasPrefix(c, "Commit:") {
+			t.Fatalf("Commit should be skipped when no staged changes, got %v", repoNoStage.calls)
+		}
+	}
+}
+
+type noStageRepo struct {
+	fakeRepository
+}
+
+func (n *noStageRepo) HasStagedChanges() (bool, error) {
+	n.calls = append(n.calls, "HasStagedChanges")
+	return false, nil
+}
+
 func TestRunStep(t *testing.T) {
 	t.Parallel()
 

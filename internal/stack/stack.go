@@ -52,6 +52,13 @@ type Step struct {
 // incremental progress. nil is valid and produces no output.
 type NotifyFn func(step Step, done bool)
 
+// FoldOptions configures a Fold operation.
+type FoldOptions struct {
+	Squash       bool
+	DeleteBranch bool
+	Message      string // empty → default message
+}
+
 // Stack orchestrates push/pull/rebase across every branch in a discovered stack.
 type Stack struct {
 	git          Repository
