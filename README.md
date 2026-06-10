@@ -75,17 +75,17 @@ git-stack fold feat-1   # feat-1's work lands on main; feat-2 rebased onto main
 
 ## Commands
 
-| Command                      | Description                                                          |
-| ---------------------------- | -------------------------------------------------------------------- |
-| `add <name>`                 | Create a new branch off `HEAD`.                                      |
-| `view`                       | Print the stack with ahead counts per branch.                        |
-| `rebase`                     | Rebase every branch in the stack onto its parent, bottom to top.     |
-| `push`                       | Push every branch. Sets upstream to `origin/<branch>` on first push. |
-| `pull`                       | Pull every branch with `--ff-only`, bottom to top.                   |
-| `move [branch] <new-parent>` | Reparent a branch and cascade the rebase through its descendants.    |
+| Command                      | Description                                                                   |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| `add <name>`                 | Create a new branch off `HEAD`.                                               |
+| `view`                       | Print the stack with ahead counts per branch.                                 |
+| `rebase`                     | Rebase every branch in the stack onto its parent, bottom to top.              |
+| `push`                       | Push every branch. Sets upstream to `origin/<branch>` on first push.          |
+| `pull`                       | Pull every branch with `--ff-only`, bottom to top.                            |
+| `move [branch] <new-parent>` | Reparent a branch and cascade the rebase through its descendants.             |
 | `fold [branch]`              | Fold a branch into its parent; cascade descendants; delete branch by default. |
-| `reset`                      | Remove all `stackParent` entries from local Git config.              |
-| `version`                    | Print the version.                                                   |
+| `reset`                      | Remove all `stackParent` entries from local Git config.                       |
+| `version`                    | Print the version.                                                            |
 
 All commands accept `--base <branch>` to override base-branch detection. The default
 base is `main`, falling back to `master`.
