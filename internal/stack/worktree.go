@@ -86,3 +86,53 @@ func (w *worktreeGitOps) RebaseOnto(newBase, upstream, branch string) error {
 	}
 	return err
 }
+
+// MergeSquash merges in the active worktree context, wrapping errors with worktree path
+// info.
+func (w *worktreeGitOps) MergeSquash(ref string) error {
+	err := w.active.MergeSquash(ref)
+	if err != nil && w.activeDir != "" {
+		return fmt.Errorf("in worktree %s: %w", w.activeDir, err)
+	}
+	return err
+}
+
+// HasStagedChanges queries the active worktree context, wrapping errors with worktree
+// path info.
+func (w *worktreeGitOps) HasStagedChanges() (bool, error) {
+	has, err := w.active.HasStagedChanges()
+	if err != nil && w.activeDir != "" {
+		return false, fmt.Errorf("in worktree %s: %w", w.activeDir, err)
+	}
+	return has, err
+}
+
+// Commit commits in the active worktree context, wrapping errors with worktree path
+// info.
+func (w *worktreeGitOps) Commit(message string) error {
+	err := w.active.Commit(message)
+	if err != nil && w.activeDir != "" {
+		return fmt.Errorf("in worktree %s: %w", w.activeDir, err)
+	}
+	return err
+}
+
+// MergeFF merges in the active worktree context, wrapping errors with worktree path
+// info.
+func (w *worktreeGitOps) MergeFF(ref string) error {
+	err := w.active.MergeFF(ref)
+	if err != nil && w.activeDir != "" {
+		return fmt.Errorf("in worktree %s: %w", w.activeDir, err)
+	}
+	return err
+}
+
+// DeleteBranch always deletes from the primary worktree.
+func (w *worktreeGitOps) DeleteBranch(name string) error {
+	return w.primary.DeleteBranch(name)
+}
+
+// UnsetStackConfig always unsets stack config from the primary worktree.
+func (w *worktreeGitOps) UnsetStackConfig(branch string) error {
+	return w.primary.UnsetStackConfig(branch)
+}

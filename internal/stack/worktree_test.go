@@ -119,6 +119,36 @@ func (f *fakeRepository) RebaseOnto(newBase, upstream, branch string) error {
 	return nil
 }
 
+func (f *fakeRepository) MergeSquash(ref string) error {
+	f.calls = append(f.calls, "MergeSquash:"+ref)
+	return nil
+}
+
+func (f *fakeRepository) HasStagedChanges() (bool, error) {
+	f.calls = append(f.calls, "HasStagedChanges")
+	return true, nil
+}
+
+func (f *fakeRepository) Commit(message string) error {
+	f.calls = append(f.calls, "Commit:"+message)
+	return nil
+}
+
+func (f *fakeRepository) MergeFF(ref string) error {
+	f.calls = append(f.calls, "MergeFF:"+ref)
+	return nil
+}
+
+func (f *fakeRepository) DeleteBranch(name string) error {
+	f.calls = append(f.calls, "DeleteBranch:"+name)
+	return nil
+}
+
+func (f *fakeRepository) UnsetStackConfig(branch string) error {
+	f.calls = append(f.calls, "UnsetStackConfig:"+branch)
+	return nil
+}
+
 func TestWorktreeGitOps_CheckoutDelegatesToRemote(t *testing.T) {
 	primary := &fakeRepository{currentBranch: "main"}
 	remote := &fakeRepository{}

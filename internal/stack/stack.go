@@ -19,6 +19,12 @@ type Repository interface {
 	Pull() error
 	Rebase(onto string) error
 	RebaseOnto(newBase, upstream, branch string) error
+	MergeSquash(ref string) error
+	HasStagedChanges() (bool, error)
+	Commit(message string) error
+	MergeFF(ref string) error
+	DeleteBranch(name string) error
+	UnsetStackConfig(branch string) error
 }
 
 // Discoverer abstracts the stack-discovery operations that Stack needs. Satisfied by
