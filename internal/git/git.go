@@ -433,19 +433,6 @@ func ParseWorktreeList(output string) map[string]string {
 	return result
 }
 
-// CommitsAhead returns the number of commits reachable from branch but not from parent.
-func (g *Client) CommitsAhead(parent, branch string) (int, error) {
-	out, err := g.run("rev-list", "--count", parent+".."+branch)
-	if err != nil {
-		return 0, err
-	}
-	var n int
-	if _, err := fmt.Sscan(out, &n); err != nil {
-		return 0, fmt.Errorf("parsing commit count %q: %w", out, err)
-	}
-	return n, nil
-}
-
 // MergeBaseOctopus returns the best common ancestor of two or more refs, using the
 // octopus algorithm (same semantics as `git merge-base --octopus`). Returns an error if
 // any two refs have disjoint histories.

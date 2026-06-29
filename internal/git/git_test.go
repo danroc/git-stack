@@ -467,49 +467,6 @@ func TestClient_Pull(t *testing.T) {
 	}
 }
 
-func TestClient_CommitsAhead(t *testing.T) {
-	c, dir := initRepo(t)
-
-	// main is at c0, so 0 commits ahead of itself.
-	n, err := c.CommitsAhead("main", "main")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n != 0 {
-		t.Errorf("CommitsAhead(main, main) = %d, want 0", n)
-	}
-
-	setupTwoFeats(t, dir)
-
-	// feat-2 was branched from main (c0), so it's 1 commit ahead of main.
-	n, err = c.CommitsAhead("main", "feat-2")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n != 1 {
-		t.Errorf("CommitsAhead(main, feat-2) = %d, want 1", n)
-	}
-
-	// feat-1 is also 1 commit ahead of main.
-	n, err = c.CommitsAhead("main", "feat-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n != 1 {
-		t.Errorf("CommitsAhead(main, feat-1) = %d, want 1", n)
-	}
-
-	// feat-1 and feat-2 diverge from main but feat-2 has c2 which is not
-	// reachable from feat-1, so it's 1 commit ahead.
-	n, err = c.CommitsAhead("feat-1", "feat-2")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n != 1 {
-		t.Errorf("CommitsAhead(feat-1, feat-2) = %d, want 1", n)
-	}
-}
-
 func TestClient_commitHasParent(t *testing.T) {
 	c, dir := initRepo(t)
 
