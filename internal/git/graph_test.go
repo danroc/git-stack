@@ -23,11 +23,6 @@ func linearGraph() *Graph {
 			"feat-1": "c1",
 			"feat-2": "c2",
 		},
-		branchesAt: map[string][]string{
-			"c0": {"main"},
-			"c1": {"feat-1"},
-			"c2": {"feat-2"},
-		},
 	}
 }
 
@@ -70,31 +65,6 @@ func TestGraph_HeadOf(t *testing.T) {
 	}
 }
 
-func TestGraph_BranchAt(t *testing.T) {
-	g := linearGraph()
-	tests := []struct {
-		hash string
-		want []string
-	}{
-		{"c1", []string{"feat-1"}},
-		{"c2", []string{"feat-2"}},
-		{"c99", nil},
-	}
-	for _, tt := range tests {
-		t.Run(tt.hash, func(t *testing.T) {
-			got := g.BranchesAt(tt.hash)
-			if len(got) != len(tt.want) {
-				t.Fatalf("got %v, want %v", got, tt.want)
-			}
-			for i, b := range tt.want {
-				if got[i] != b {
-					t.Errorf("[%d] = %q, want %q", i, got[i], b)
-				}
-			}
-		})
-	}
-}
-
 func TestGraph_Branches(t *testing.T) {
 	g := linearGraph()
 	got := g.Branches()
@@ -127,48 +97,6 @@ func TestGraph_FirstParent(t *testing.T) {
 				t.Errorf("got %q, %v; want %q, %v", got, ok, tt.want, tt.ok)
 			}
 		})
-	}
-}
-
-func TestGraph_IsAncestor(t *testing.T) {
-	g := linearGraph()
-	tests := []struct {
-		name string
-		anc  string
-		desc string
-		want bool
-	}{
-		{"forward", "c1", "c2", true},
-		{"self", "c1", "c1", true},
-		{"reverse", "c2", "c1", false},
-		{"floor reaches descendant", "c0", "c2", true},
-		{"missing", "c99", "c2", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := g.IsAncestor(tt.anc, tt.desc); got != tt.want {
-				t.Errorf("got %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGraph_IsAncestor_UsesAllParents(t *testing.T) {
-	g := NewGraph(
-		map[string][]string{
-			"c0": {},
-			"c1": {"c0"},
-			"c2": {"c1"},
-			"m1": {"c2", "c0"},
-		},
-		map[string]string{
-			"main": "m1",
-			"base": "c0",
-		},
-	)
-
-	if !g.IsAncestor("c0", "m1") {
-		t.Fatal("expected c0 to be an ancestor of merge commit m1 via second parent")
 	}
 }
 
@@ -328,22 +256,6 @@ func TestGraph_MergeBase_UsesAllParents(t *testing.T) {
 	}
 	if got != "side" {
 		t.Fatalf("MergeBase(merge, side) = %q, want side", got)
-	}
-}
-
-func TestGraph_BranchAt_MultipleBranches(t *testing.T) {
-	g := NewGraph(
-		map[string][]string{"c1": {"c0"}},
-		map[string]string{
-			"main":   "c0",
-			"feat-a": "c1",
-			"feat-b": "c1", // same HEAD as feat-a
-		},
-	)
-	branches := g.BranchesAt("c1")
-	want := []string{"feat-a", "feat-b"}
-	if !slices.Equal(branches, want) {
-		t.Errorf("got %v, want %v (sorted alphabetically)", branches, want)
 	}
 }
 
@@ -591,15 +503,6 @@ func TestGraph_FirstParent_Missing(t *testing.T) {
 	_, ok := g.FirstParent("missing")
 	if ok {
 		t.Error("FirstParent(missing) should return ok=false")
-	}
-}
-
-func TestGraph_BranchesAt_Empty(t *testing.T) {
-	g := linearGraph()
-
-	branches := g.BranchesAt("nonexistent")
-	if len(branches) != 0 {
-		t.Errorf("BranchesAt(nonexistent) = %v, want nil or empty", branches)
 	}
 }
 

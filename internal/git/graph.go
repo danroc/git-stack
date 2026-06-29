@@ -14,9 +14,8 @@ import (
 // the base branch. All ancestry and distance queries run in-process after an initial
 // two-command load.
 type Graph struct {
-	parents    map[string][]string // commit_hash → parent_hashes
-	heads      map[string]string   // branch_name → commit_hash
-	branchesAt map[string][]string // commit_hash → branch_names (sorted)
+	parents map[string][]string // commit_hash → parent_hashes
+	heads   map[string]string   // branch_name → commit_hash
 }
 
 // LoadGraph builds the commit graph for all local branches. The graph floor is the
@@ -52,24 +51,15 @@ func (g *Client) listBranchHeads() (map[string]string, error) {
 }
 
 // buildGraph constructs an in-memory commit DAG from the given branch heads. It
-// computes the floor (octopus merge-base of all heads), loads all commits at or above
-// the floor, and maps commits to the branches pointing at them.
+// computes the floor (octopus merge-base of all heads) and loads all commits at or
+// above the floor.
 func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 	graph := &Graph{
-		parents:    make(map[string][]string),
-		heads:      heads,
-		branchesAt: make(map[string][]string),
+		parents: make(map[string][]string),
+		heads:   heads,
 	}
 	if len(heads) == 0 {
 		return graph, nil
-	}
-
-	// Map commits → branches pointing to them.
-	for branch, hash := range heads {
-		graph.branchesAt[hash] = append(graph.branchesAt[hash], branch)
-	}
-	for _, branches := range graph.branchesAt {
-		slices.Sort(branches)
 	}
 
 	// Compute the floor: the merge-base of every branch head (including the base
@@ -124,22 +114,11 @@ func parseParentLines(out string) (map[string][]string, error) {
 	return parents, nil
 }
 
-// NewGraph constructs a Graph from raw commit data. When two branches share a HEAD,
-// both are retained in branchAt at that commit, sorted alphabetically.
+// NewGraph constructs a Graph from raw commit data.
 func NewGraph(parents map[string][]string, heads map[string]string) *Graph {
-	branchesAt := make(map[string][]string, len(heads))
-	for branch, hash := range heads {
-		branchesAt[hash] = append(branchesAt[hash], branch)
-	}
-
-	for _, names := range branchesAt {
-		slices.Sort(names)
-	}
-
 	return &Graph{
-		parents:    parents,
-		heads:      heads,
-		branchesAt: branchesAt,
+		parents: parents,
+		heads:   heads,
 	}
 }
 
@@ -167,13 +146,6 @@ func (g *Graph) HasBranch(branch string) bool {
 func (g *Graph) HeadOf(branch string) (string, bool) {
 	h, ok := g.heads[branch]
 	return h, ok
-}
-
-// BranchesAt returns all branches whose HEAD is at hash, sorted alphabetically. The
-// returned slice is a copy.
-func (g *Graph) BranchesAt(hash string) []string {
-	branches := g.branchesAt[hash]
-	return slices.Clone(branches)
 }
 
 // Branches returns all local branch names known to the graph, sorted alphabetically.
@@ -236,16 +208,6 @@ func (g *Graph) Ancestors(hash string) iter.Seq2[string, int] {
 			}
 		}
 	}
-}
-
-// IsAncestor reports whether ancestor is reachable from descendant.
-func (g *Graph) IsAncestor(ancestor, descendant string) bool {
-	for hash := range g.Ancestors(descendant) {
-		if hash == ancestor {
-			return true
-		}
-	}
-	return false
 }
 
 // CommitsBetween returns the number of commits between a and b relative to their
