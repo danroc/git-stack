@@ -326,16 +326,6 @@ func TestSplitLines(t *testing.T) {
 	}
 }
 
-func TestClient_Dir(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	c := NewClient(dir)
-	if c.Dir() != dir {
-		t.Errorf("Dir() = %q, want %q", c.Dir(), dir)
-	}
-}
-
 func TestClient_ListBranches(t *testing.T) {
 	c, dir := initRepo(t)
 

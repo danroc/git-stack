@@ -10,14 +10,15 @@ import (
 )
 
 // initTestRepo creates a temporary git repository for config operations.
-func initTestRepo(t *testing.T) *git.Client {
+// It returns the client and the path to the repository directory.
+func initTestRepo(t *testing.T) (*git.Client, string) {
 	t.Helper()
 	dir := t.TempDir()
 	cmd := exec.Command("git", "init", "-b", "main", dir) //nolint:gosec
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
-	return git.NewClient(dir)
+	return git.NewClient(dir), dir
 }
 
 // initLinearRepo creates a real git repo with three commits and branches:
@@ -46,8 +47,9 @@ func initLinearRepo(t *testing.T) *git.Client {
 
 func newTestEngine(t *testing.T, g *git.Graph, base string) *Engine {
 	t.Helper()
+	client, _ := initTestRepo(t)
 	return &Engine{
-		git:   initTestRepo(t),
+		git:   client,
 		base:  base,
 		graph: g,
 	}
@@ -617,7 +619,7 @@ func TestBuildTree_ComputesAheadBehind(t *testing.T) {
 }
 
 func TestWalkResolvedParents_CycleDetection(t *testing.T) {
-	g := initTestRepo(t)
+	g, _ := initTestRepo(t)
 
 	e := &Engine{
 		git:   g,
@@ -717,10 +719,7 @@ func TestNewEngine(t *testing.T) {
 }
 
 func TestDetectBase_MainBranch(t *testing.T) {
-	g := initTestRepo(t)
-	dir := g.Dir()
-
-	// Init with main.
+	g, dir := initTestRepo(t)
 	cmd := exec.Command( //nolint:gosec,golines
 		"git", "-C", dir, "commit", "--allow-empty", "-m", "c0",
 	)

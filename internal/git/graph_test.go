@@ -465,26 +465,6 @@ func TestParseParentLines(t *testing.T) {
 	}
 }
 
-func TestGraph_ParentsOf(t *testing.T) {
-	g := NewGraph(
-		map[string][]string{
-			"c0": {},
-			"c1": {"c0"},
-			"m1": {"c1", "c0"},
-		},
-		map[string]string{"main": "m1"},
-	)
-
-	ps := g.ParentsOf("m1")
-	if len(ps) != 2 {
-		t.Fatalf("ParentsOf(m1) = %v, want 2 parents", ps)
-	}
-
-	ps = g.ParentsOf("c0")
-	if len(ps) != 0 {
-		t.Errorf("ParentsOf(c0) = %v, want []", ps)
-	}
-}
 
 func TestGraph_HasBranch(t *testing.T) {
 	g := linearGraph()

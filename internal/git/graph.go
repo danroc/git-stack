@@ -153,11 +153,6 @@ func (g *Graph) Branches() []string {
 	return slices.Sorted(maps.Keys(g.heads))
 }
 
-// ParentsOf returns the parent hashes of hash in order. The returned slice is a copy.
-func (g *Graph) ParentsOf(hash string) []string {
-	return slices.Clone(g.parents[hash])
-}
-
 // FirstParent returns the first parent of hash.
 func (g *Graph) FirstParent(hash string) (string, bool) {
 	ps := g.parents[hash]
