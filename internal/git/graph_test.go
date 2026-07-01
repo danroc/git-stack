@@ -465,7 +465,6 @@ func TestParseParentLines(t *testing.T) {
 	}
 }
 
-
 func TestGraph_HasBranch(t *testing.T) {
 	g := linearGraph()
 
