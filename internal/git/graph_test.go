@@ -443,10 +443,7 @@ func TestParseParentLines(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := parseParentLines(tc.input)
-			if err != nil {
-				t.Fatalf("parseParentLines(%q) error: %v", tc.input, err)
-			}
+			got := parseParentLines(tc.input)
 			if len(got) != len(tc.want) {
 				t.Fatalf("parseParentLines(%q) = %v, want %v", tc.input, got, tc.want)
 			}

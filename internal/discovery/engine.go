@@ -270,15 +270,16 @@ func (e *Engine) SubtreeChildren(branch string) []BranchWithParent {
 //
 // The merge-base is computed from the live branch heads (not the cached graph) so that
 // it remains correct even after a rebase has moved the branch within the same session.
+// Recording the merge-base is best-effort: the parent relation alone is enough for the
+// stack to work, so a merge-base failure must not undo the mutation.
 func (e *Engine) SetParent(branch, parent string) error {
 	if err := e.git.SetStackParent(branch, parent); err != nil {
 		return err
 	}
-	base, err := e.git.ComputeMergeBase(branch, parent)
-	if err != nil {
-		return nil
+	if base, err := e.git.ComputeMergeBase(branch, parent); err == nil {
+		return e.git.SetStackMergeBase(branch, base)
 	}
-	return e.git.SetStackMergeBase(branch, base)
+	return nil
 }
 
 // findTreeNode searches the tree rooted at root for a node with the given name,

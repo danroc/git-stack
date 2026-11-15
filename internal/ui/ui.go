@@ -110,6 +110,10 @@ func (p palette) formatEntry(e *TreeEntry) string {
 	return s
 }
 
+// stdinReader is shared across prompts so buffered input is not lost when
+// Disambiguate is called more than once for the same process.
+var stdinReader = bufio.NewReader(os.Stdin)
+
 // Disambiguate prompts the user to choose from multiple candidate branches
 // when a bifurcation is detected. It satisfies discovery.ChooseBranchFn.
 func Disambiguate(action string, choices []string) (string, error) {
@@ -119,8 +123,7 @@ func Disambiguate(action string, choices []string) (string, error) {
 	}
 	fmt.Print("Enter choice: ")
 
-	reader := bufio.NewReader(os.Stdin)
-	line, err := reader.ReadString('\n')
+	line, err := stdinReader.ReadString('\n')
 	if err != nil {
 		return "", fmt.Errorf("reading input: %w", err)
 	}

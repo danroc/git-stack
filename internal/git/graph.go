@@ -89,10 +89,7 @@ func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 		return nil, err
 	}
 
-	parents, err := parseParentLines(out)
-	if err != nil {
-		return nil, err
-	}
+	parents := parseParentLines(out)
 
 	// Ensure floor is included with no parents.
 	parents[floor] = nil
@@ -103,7 +100,7 @@ func (g *Client) buildGraph(heads map[string]string) (*Graph, error) {
 
 // parseParentLines parses git log --format=%P output into a map of commit hash to
 // parent hashes. Each line is "hash parent1 [parent2 ...]".
-func parseParentLines(out string) (map[string][]string, error) {
+func parseParentLines(out string) map[string][]string {
 	parents := make(map[string][]string)
 	for _, line := range splitLines(out) {
 		fields := strings.Fields(line)
@@ -111,7 +108,7 @@ func parseParentLines(out string) (map[string][]string, error) {
 			parents[fields[0]] = fields[1:]
 		}
 	}
-	return parents, nil
+	return parents
 }
 
 // NewGraph constructs a Graph from raw commit data.

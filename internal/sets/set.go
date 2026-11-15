@@ -17,15 +17,6 @@ func New[T comparable](items ...T) *Set[T] {
 	return s
 }
 
-// Collect returns a Set containing every item yielded by seq.
-func Collect[T comparable](seq iter.Seq[T]) *Set[T] {
-	s := &Set[T]{m: make(map[T]struct{})}
-	for item := range seq {
-		s.m[item] = struct{}{}
-	}
-	return s
-}
-
 // CollectKeys returns a Set containing every key yielded by seq. Values are ignored.
 func CollectKeys[K comparable, V any](seq iter.Seq2[K, V]) *Set[K] {
 	s := &Set[K]{m: make(map[K]struct{})}

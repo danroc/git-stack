@@ -72,7 +72,10 @@ type Stack struct {
 func New(g *git.Client, base string) (*Stack, error) {
 	var ops Repository = g
 	if worktrees, err := g.WorktreeList(); err == nil && len(worktrees) > 1 {
-		cwd, _ := filepath.Abs(".")
+		cwd, err := filepath.Abs(".")
+		if err != nil {
+			return nil, fmt.Errorf("resolve working directory: %w", err)
+		}
 		ops = newWorktreeGitOps(g, worktrees, cwd, func(dir string) Repository {
 			return git.NewClient(dir)
 		})
@@ -298,7 +301,6 @@ func (s *Stack) Fold(branch string, opts FoldOptions, fn NotifyFn) error {
 		return fmt.Errorf("find parent of %s: %w", branch, err)
 	}
 
-	foldedParent := branch
 	foldStep := Step{Branch: branch, Parent: parent}
 	children := s.disc.SubtreeChildren(branch)
 
@@ -310,30 +312,14 @@ func (s *Stack) Fold(branch string, opts FoldOptions, fn NotifyFn) error {
 
 	for _, dep := range children {
 		rebaseParent := dep.Parent
-		if dep.Parent == foldedParent {
+		if dep.Parent == branch {
 			rebaseParent = parent
 		}
-		branch := dep.Branch.Name
+		child := dep.Branch.Name
 		if err := runStep(
 			notify,
-			Step{Branch: branch, Parent: rebaseParent},
-			func() error {
-				if rebaseParent != dep.Parent {
-					return s.checkoutAndRebase(branch, rebaseParent)
-				}
-				if err := s.git.Checkout(branch); err != nil {
-					return fmt.Errorf("checkout %s: %w", branch, err)
-				}
-				if err := s.git.Rebase(rebaseParent); err != nil {
-					return fmt.Errorf(
-						"rebase %s onto %s: %w",
-						branch,
-						rebaseParent,
-						err,
-					)
-				}
-				return nil
-			},
+			Step{Branch: child, Parent: rebaseParent},
+			func() error { return s.checkoutAndRebase(child, rebaseParent) },
 		); err != nil {
 			return err
 		}

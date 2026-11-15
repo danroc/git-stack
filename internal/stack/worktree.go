@@ -58,73 +58,49 @@ func (w *worktreeGitOps) Push(branch string) error {
 	return w.primary.Push(branch)
 }
 
-// Pull pulls in the active worktree context, wrapping errors with worktree path info.
+// wrapErr annotates err with the active worktree path when the operation ran outside
+// the primary worktree.
+func (w *worktreeGitOps) wrapErr(err error) error {
+	if err != nil && w.activeDir != "" {
+		return fmt.Errorf("in worktree %s: %w", w.activeDir, err)
+	}
+	return err
+}
+
+// Pull pulls in the active worktree context.
 func (w *worktreeGitOps) Pull() error {
-	err := w.active.Pull()
-	if err != nil && w.activeDir != "" {
-		return fmt.Errorf("in worktree %s: %w", w.activeDir, err)
-	}
-	return err
+	return w.wrapErr(w.active.Pull())
 }
 
-// Rebase rebases in the active worktree context, wrapping errors with worktree path
-// info.
+// Rebase rebases in the active worktree context.
 func (w *worktreeGitOps) Rebase(onto string) error {
-	err := w.active.Rebase(onto)
-	if err != nil && w.activeDir != "" {
-		return fmt.Errorf("in worktree %s: %w", w.activeDir, err)
-	}
-	return err
+	return w.wrapErr(w.active.Rebase(onto))
 }
 
-// RebaseOnto rebases in the active worktree context, wrapping errors with worktree path
-// info.
+// RebaseOnto rebases in the active worktree context.
 func (w *worktreeGitOps) RebaseOnto(newBase, upstream, branch string) error {
-	err := w.active.RebaseOnto(newBase, upstream, branch)
-	if err != nil && w.activeDir != "" {
-		return fmt.Errorf("in worktree %s: %w", w.activeDir, err)
-	}
-	return err
+	return w.wrapErr(w.active.RebaseOnto(newBase, upstream, branch))
 }
 
-// MergeSquash merges in the active worktree context, wrapping errors with worktree path
-// info.
+// MergeSquash merges in the active worktree context.
 func (w *worktreeGitOps) MergeSquash(ref string) error {
-	err := w.active.MergeSquash(ref)
-	if err != nil && w.activeDir != "" {
-		return fmt.Errorf("in worktree %s: %w", w.activeDir, err)
-	}
-	return err
+	return w.wrapErr(w.active.MergeSquash(ref))
 }
 
-// HasStagedChanges queries the active worktree context, wrapping errors with worktree
-// path info.
+// HasStagedChanges queries the active worktree context.
 func (w *worktreeGitOps) HasStagedChanges() (bool, error) {
 	has, err := w.active.HasStagedChanges()
-	if err != nil && w.activeDir != "" {
-		return false, fmt.Errorf("in worktree %s: %w", w.activeDir, err)
-	}
-	return has, err
+	return has, w.wrapErr(err)
 }
 
-// Commit commits in the active worktree context, wrapping errors with worktree path
-// info.
+// Commit commits in the active worktree context.
 func (w *worktreeGitOps) Commit(message string) error {
-	err := w.active.Commit(message)
-	if err != nil && w.activeDir != "" {
-		return fmt.Errorf("in worktree %s: %w", w.activeDir, err)
-	}
-	return err
+	return w.wrapErr(w.active.Commit(message))
 }
 
-// MergeFF merges in the active worktree context, wrapping errors with worktree path
-// info.
+// MergeFF merges in the active worktree context.
 func (w *worktreeGitOps) MergeFF(ref string) error {
-	err := w.active.MergeFF(ref)
-	if err != nil && w.activeDir != "" {
-		return fmt.Errorf("in worktree %s: %w", w.activeDir, err)
-	}
-	return err
+	return w.wrapErr(w.active.MergeFF(ref))
 }
 
 // DeleteBranch always deletes from the primary worktree.

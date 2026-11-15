@@ -763,8 +763,11 @@ func TestFold_CascadesDescendants(t *testing.T) {
 	if !equalStrings(repo.calls, want) {
 		t.Errorf("calls =\n  %v\nwant =\n  %v", repo.calls, want)
 	}
-	if !equalStrings(disc.setParentLog, []string{"feat-2:main"}) {
-		t.Errorf("SetParent log = %v, want [feat-2:main]", disc.setParentLog)
+	if !equalStrings(disc.setParentLog, []string{"feat-2:main", "feat-3:feat-2"}) {
+		t.Errorf(
+			"SetParent log = %v, want [feat-2:main feat-3:feat-2]",
+			disc.setParentLog,
+		)
 	}
 }
 
