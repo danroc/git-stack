@@ -29,15 +29,26 @@ RESET   := \033[0m
 # ======================================================================================
 
 .PHONY: lint
-lint: tidy format lint-golangci ## Run all linters
+lint: tidy-check format-check lint-golangci ## Check lint and formatting without modifying files
+
+.PHONY: lint-fix
+lint-fix: tidy format lint-golangci ## Fix dependencies and formatting, then run lint checks
 
 .PHONY: tidy
 tidy: ## Tidy up dependencies
 	go mod tidy
 
+.PHONY: tidy-check
+tidy-check: ## Check dependencies are tidy
+	go mod tidy -diff
+
 .PHONY: format
 format: ## Run code formatters
 	golangci-lint fmt
+
+.PHONY: format-check
+format-check: ## Check files are formatted
+	golangci-lint fmt --diff
 
 .PHONY: lint-golangci
 lint-golangci: ## Run golangci-lint
