@@ -29,13 +29,10 @@ guidelines for LLM coding. Keep changes minimal and verifiable.
 
 ## Before committing
 
-The agent **MUST** run these commands from the repo root and confirm they all pass
-before creating a commit:
+The agent must run these before every commit (or PR) and confirm each exits 0:
 
-```bash
-make build
-make lint
-make test
-```
+- `build`: `make build`
+- `lint`: `make lint`
+- `test`: `make test`
 
-If a format command modifies files, stage those changes before committing.
+Use `make lint-fix` to apply formatting and dependency fixes; stage any files it rewrites.
